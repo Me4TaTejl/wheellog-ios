@@ -6,7 +6,7 @@ struct TelemetryPage: View {
 
     var body: some View {
         ClassicScrollPage {
-            LabeledContent("Модель", value: ShermanProtocol.model)
+            LabeledContent("Модель", value: wheel.modelName)
             LabeledContent("Прошивка", value: wheel.frame?.version ?? "—")
             LabeledContent("Устройство", value: wheel.deviceName ?? "—")
             Divider()
@@ -24,7 +24,7 @@ struct TelemetryPage: View {
     private func precision(_ metric: Metric) -> Int {
         switch metric {
         case .pwm, .trip: 2
-        case .battery, .power, .temperature: 0
+        case .battery, .power, .temperature, .motorTemperature: 0
         default: 1
         }
     }

@@ -5,7 +5,7 @@ struct WheelControls: View {
     @AppStorage("strobeRate") private var strobeRate = 1.0
 
     private var canSetPedals: Bool {
-        wheel.canControl && !wheel.strobe && wheel.pendingPedalMode == nil &&
+        wheel.canControlPedals && !wheel.strobe && wheel.pendingPedalMode == nil &&
             abs(wheel.telemetry.speed ?? .infinity) < 1
     }
 
@@ -13,7 +13,7 @@ struct WheelControls: View {
         RideScreen(title: "Колесо", showsClose: true) {
             RidePanel {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("Veteran Sherman S").font(.title3.bold())
+                    Text(wheel.modelName).font(.title3.bold())
                     Spacer()
                     if let version = wheel.frame?.version {
                         Text(version).font(.system(.caption, design: .monospaced)).foregroundStyle(RideColors.accent)
@@ -27,13 +27,24 @@ struct WheelControls: View {
                     Button("Отключить", role: .destructive) { wheel.disconnect() }
                         .buttonStyle(.bordered)
                 } else {
+                    Picker("Протокол Bluetooth", selection: $wheel.preferredFamily) {
+                        ForEach(WheelFamily.allCases) { family in
+                            Text(family.title).tag(family)
+                        }
+                    }
+                    .disabled(wheel.state == .scanning)
                     scanControl
                     ForEach(wheel.devices) { device in
                         Button { wheel.connect(device) } label: {
                             HStack {
-                                Image(systemName: device.preferred ? "checkmark.circle" : "dot.radiowaves.left.and.right")
-                                Text(device.name)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Image(systemName: device.hint != nil ? "checkmark.circle" : "dot.radiowaves.left.and.right")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(device.name)
+                                    if let family = device.hint {
+                                        Text(family.title).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 if device.rssi != 127 {
                                     Text("\(device.rssi) dBm")
                                         .font(.caption.monospacedDigit())
@@ -61,7 +72,7 @@ struct WheelControls: View {
                 .buttonStyle(.bordered)
         } else {
             Button { wheel.scan() } label: {
-                Label("Найти Sherman S", systemImage: "dot.radiowaves.left.and.right")
+                Label("Найти моноколесо", systemImage: "dot.radiowaves.left.and.right")
             }
             .buttonStyle(.borderedProminent)
             .foregroundStyle(.black)
@@ -77,7 +88,7 @@ struct WheelControls: View {
                 Button("Выключить") { wheel.setLight(false) }
             }
             .buttonStyle(.bordered)
-            .disabled(!wheel.canControl || wheel.strobe)
+            .disabled(!wheel.canControlLight || wheel.strobe)
 
             Divider()
 
@@ -87,7 +98,7 @@ struct WheelControls: View {
                 Text("2 Гц").tag(2.0)
             }
             .pickerStyle(.segmented)
-            .disabled(wheel.strobe)
+            .disabled(!wheel.canStrobe || wheel.strobe)
 
             Button {
                 if wheel.strobe { wheel.stopStrobe() }
@@ -100,7 +111,7 @@ struct WheelControls: View {
             .buttonStyle(.borderedProminent)
             .tint(wheel.strobe ? .orange : RideColors.accent)
             .foregroundStyle(.black)
-            .disabled(!wheel.canControl && !wheel.strobe)
+            .disabled(!wheel.canStrobe && !wheel.strobe)
 
             Text("Частота зависит от отклика Bluetooth. При остановке приложение возвращает последнюю выбранную команду фары, по умолчанию — постоянный свет.")
                 .font(.footnote)
@@ -122,7 +133,7 @@ struct WheelControls: View {
             }
             .buttonStyle(.bordered)
             .disabled(!canSetPedals)
-            if wheel.canControl && abs(wheel.telemetry.speed ?? .infinity) >= 1 {
+            if wheel.canControlPedals && abs(wheel.telemetry.speed ?? .infinity) >= 1 {
                 Text("Остановите колесо, чтобы изменить режим педалей.")
                     .font(.footnote)
                     .foregroundStyle(RideColors.muted)

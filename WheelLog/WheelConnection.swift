@@ -11,11 +11,8 @@ final class WheelConnection: NSObject, ObservableObject {
         let peripheral: CBPeripheral
         let name: String
         let rssi: Int
+        let hint: WheelFamily?
         var id: UUID { peripheral.identifier }
-        var preferred: Bool {
-            let upper = name.uppercased()
-            return upper.hasPrefix("LK") || upper.contains("SHERMAN")
-        }
     }
 
     struct SpeedPoint: Identifiable {
@@ -29,30 +26,47 @@ final class WheelConnection: NSObject, ObservableObject {
     @Published private(set) var state = State.idle
     @Published private(set) var devices = [Device]()
     @Published private(set) var deviceName: String?
-    @Published private(set) var frame: ShermanFrame?
+    @Published private(set) var frame: WheelFrame?
+    @Published private(set) var modelName = "Моноколесо"
+    @Published var preferredFamily = WheelFamily.automatic
     @Published private(set) var telemetry = Telemetry()
     @Published private(set) var extrema = RideExtrema()
     @Published private(set) var speedHistory = [SpeedPoint]()
     @Published private(set) var demo = false
     @Published private(set) var strobe = false
     @Published private(set) var pendingPedalMode: PedalMode?
-    @Published private(set) var status = "Подключите Sherman S"
+    @Published private(set) var status = "Подключите моноколесо"
     @Published private(set) var commandStatus: String?
 
     var onSample: ((Telemetry, Bool, Date) -> Void)?
     var onSourceEnded: (() -> Void)?
     var onTelemetryLost: ((Date) -> Void)?
     var showingLastReading: Bool { !demo && state != .live && telemetry.speed != nil }
-    var canControl: Bool {
-        state == .live && characteristicHasWrite && pendingDisconnect == nil
+    var sourceKey: String {
+        if demo { return "demo" }
+        if modelName == ShermanProtocol.model { return "sherman_s" }
+        if modelName.lowercased().hasPrefix("nosfet") { return "nosfet" }
+        return adapter?.family.rawValue ?? "wheel"
+    }
+    var canControlLight: Bool { canWriteSettings && (legacySherman || adapter?.session.hasHeadlight == true) }
+    var canStrobe: Bool { canWriteSettings && legacySherman }
+    var canControlPedals: Bool {
+        // The mode index and readback are known for these protocol families.
+        let family = adapter?.family
+        return canWriteSettings && (legacySherman ||
+            ((family == .leaperkim || family == .kingsong) && adapter?.session.hasPedalModes == true))
     }
 
-    private let serviceID = CBUUID(string: ShermanProtocol.service)
-    private let characteristicID = CBUUID(string: ShermanProtocol.characteristic)
     private var central: CBCentralManager?
     private var peripheral: CBPeripheral?
-    private var channel: CBCharacteristic?
-    private var decoder = ShermanProtocol()
+    private var adapter: WheelAdapter?
+    private var connectingFamily = WheelFamily.automatic
+    private var pendingServices = Set<CBUUID>()
+    private var pendingSubscriptions = Set<String>()
+    private var subscribed = Set<String>()
+    private var characteristicsByID = [String: CBCharacteristic]()
+    private var shermanDecoder = ShermanProtocol()
+    private var legacySherman = false
     private var lastTelemetryDevice: UUID?
     private var scanRequested = false
     private var lastPacket: TimeInterval?
@@ -65,14 +79,16 @@ final class WheelConnection: NSObject, ObservableObject {
     private var lightCommanded: Bool?
     private var steadyLight: Bool?
     private var queuedSteadyLight: Bool?
-    private var awaitingResponse = false
+    private var awaitingResponse: CBCharacteristic?
     private var pendingDisconnect: DispatchWorkItem?
     private var pedalDeadline: TimeInterval?
     private var currentTime: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
-    private var characteristicHasWrite: Bool {
-        guard let channel else { return false }
-        return channel.properties.contains(.writeWithoutResponse) || channel.properties.contains(.write)
+    private var uptimeMillis: Int64 { Int64(currentTime * 1_000) }
+    private var canWriteSettings: Bool {
+        guard state == .live, pendingDisconnect == nil, let adapter, let lastPacket,
+              currentTime - lastPacket < 2, let output = characteristicsByID[adapter.writeUUID] else { return false }
+        return output.properties.contains(.writeWithoutResponse) || output.properties.contains(.write)
     }
 
     func scan() {
@@ -95,7 +111,7 @@ final class WheelConnection: NSObject, ObservableObject {
         central?.stopScan()
         if state == .scanning {
             state = .idle
-            status = devices.isEmpty ? "Sherman S не найден" : "Выберите своё колесо"
+            status = devices.isEmpty ? "Моноколесо не найдено" : "Выберите своё колесо"
         }
     }
 
@@ -103,7 +119,8 @@ final class WheelConnection: NSObject, ObservableObject {
         guard let central, central.state == .poweredOn, peripheral == nil else { return }
         stopScan()
         setDemo(false)
-        decoder = ShermanProtocol()
+        shermanDecoder = ShermanProtocol()
+        connectingFamily = preferredFamily
         commandStatus = nil
         state = .connecting
         status = "Подключение…"
@@ -112,10 +129,10 @@ final class WheelConnection: NSObject, ObservableObject {
         central.connect(device.peripheral)
         let timeout = DispatchWorkItem { [weak self] in
             guard let self, self.state == .connecting || self.state == .waiting else { return }
-            self.endConnection(message: "Нет данных Sherman S. Проверьте, что колесо включено и свободно.")
+            self.endConnection(message: "Нет телеметрии. Проверьте модель протокола и отключите другие приложения для колеса.")
         }
         connectionTimeout = timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: timeout)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 24, execute: timeout)
     }
 
     func disconnect() {
@@ -143,6 +160,7 @@ final class WheelConnection: NSObject, ObservableObject {
         telemetry = Telemetry()
         extrema = RideExtrema()
         lastTelemetryDevice = nil
+        modelName = enabled ? ShermanProtocol.model : "Моноколесо"
         if enabled {
             stopScan()
             let start = currentTime
@@ -155,8 +173,16 @@ final class WheelConnection: NSObject, ObservableObject {
     }
 
     func setLight(_ on: Bool) {
-        guard canControl, !strobe else { return }
-        requestSteadyLight(on)
+        guard canControlLight, !strobe else { return }
+        if legacySherman {
+            requestSteadyLight(on)
+        } else if let adapter, canSubmit(to: adapter.writeUUID),
+                  adapter.session.requestLight(enabled: on, now: uptimeMillis) {
+            commandStatus = on ? "Отправляем команду включения фары" : "Отправляем команду выключения фары"
+            flushProtocolWrites()
+        } else {
+            commandStatus = "Канал фары занят или недоступен на этой прошивке."
+        }
     }
 
     func resetExtrema() {
@@ -166,7 +192,7 @@ final class WheelConnection: NSObject, ObservableObject {
     }
 
     func startStrobe(hz: Double) {
-        guard canControl, !strobe, queuedSteadyLight == nil, [0.5, 1, 2].contains(hz) else { return }
+        guard canStrobe, !strobe, queuedSteadyLight == nil, [0.5, 1, 2].contains(hz) else { return }
         strobeNextState = !(lightCommanded ?? false)
         strobe = true
         commandStatus = nil
@@ -188,10 +214,20 @@ final class WheelConnection: NSObject, ObservableObject {
     }
 
     func setPedals(_ mode: PedalMode) {
-        guard canControl, !strobe, pendingPedalMode == nil,
+        guard canControlPedals, !strobe, pendingPedalMode == nil,
               let frame, let lastPacket, currentTime - lastPacket < 1.5,
               let speed = frame.telemetry.speed, abs(speed) < 1 else { return }
-        guard send(ShermanProtocol.pedals(mode)) else {
+        let submitted: Bool
+        if legacySherman {
+            submitted = sendSherman(ShermanProtocol.pedals(mode))
+        } else if let adapter, canSubmit(to: adapter.writeUUID) {
+            let index: Int32 = switch mode { case .hard: 0; case .medium: 1; case .soft: 2 }
+            submitted = adapter.session.requestPedals(mode: index, now: uptimeMillis)
+            if submitted { flushProtocolWrites() }
+        } else {
+            submitted = false
+        }
+        guard submitted else {
             commandStatus = "Bluetooth занят. Попробуйте ещё раз."
             return
         }
@@ -208,34 +244,70 @@ final class WheelConnection: NSObject, ObservableObject {
 
     private func flushSteadyLight() {
         guard let on = queuedSteadyLight else { return }
-        guard send(ShermanProtocol.light(on: on)) else { return }
+        guard sendSherman(ShermanProtocol.light(on: on)) else { return }
         queuedSteadyLight = nil
         lightCommanded = on
         commandStatus = on ? "Отправлена команда включения фары" : "Отправлена команда выключения фары"
     }
 
     private func pulse() {
-        guard let lastPacket, canControl, currentTime - lastPacket < 2 else {
+        guard canStrobe else {
             stopStrobe()
             return
         }
-        guard send(ShermanProtocol.light(on: strobeNextState)) else { return }
+        guard sendSherman(ShermanProtocol.light(on: strobeNextState)) else { return }
         lightCommanded = strobeNextState
         strobeNextState.toggle()
     }
 
-    private func send(_ packet: Data) -> Bool {
-        guard let peripheral, peripheral.state == .connected, let channel, channel.isNotifying else { return false }
-        if channel.properties.contains(.writeWithoutResponse) {
-            guard peripheral.canSendWriteWithoutResponse else { return false }
-            peripheral.writeValue(packet, for: channel, type: .withoutResponse)
-        } else if channel.properties.contains(.write), !awaitingResponse {
-            awaitingResponse = true
-            peripheral.writeValue(packet, for: channel, type: .withResponse)
-        } else {
+    private enum WriteResult { case accepted, busy, unavailable }
+
+    private func canSubmit(to uuid: String) -> Bool {
+        guard awaitingResponse == nil, let peripheral, let characteristic = characteristicsByID[uuid] else {
             return false
         }
-        return true
+        return !characteristic.properties.contains(.writeWithoutResponse) || peripheral.canSendWriteWithoutResponse
+    }
+
+    private func sendSherman(_ packet: Data) -> Bool {
+        guard legacySherman, let adapter, subscribed.contains(adapter.writeUUID) else { return false }
+        return write(packet, to: adapter.writeUUID, preferred: "AUTO") == .accepted
+    }
+
+    private func write(_ packet: Data, to uuid: String, preferred: String) -> WriteResult {
+        guard let peripheral, peripheral.state == .connected, let output = characteristicsByID[uuid],
+              let type = writeType(for: output, preferred: preferred),
+              packet.count <= peripheral.maximumWriteValueLength(for: type) else { return .unavailable }
+        guard awaitingResponse == nil else { return .busy }
+        if type == .withoutResponse {
+            guard peripheral.canSendWriteWithoutResponse else { return .busy }
+        } else {
+            awaitingResponse = output
+        }
+        peripheral.writeValue(packet, for: output, type: type)
+        return .accepted
+    }
+
+    private func writeType(for output: CBCharacteristic, preferred: String) -> CBCharacteristicWriteType? {
+        let withResponse = output.properties.contains(.write)
+        let withoutResponse = output.properties.contains(.writeWithoutResponse)
+        switch preferred {
+        case "NO_RESPONSE": return withoutResponse ? .withoutResponse : nil
+        case "WITH_RESPONSE": return withResponse ? .withResponse : nil
+        default:
+            if withoutResponse { return .withoutResponse }
+            return withResponse ? .withResponse : nil
+        }
+    }
+
+    private func flushProtocolWrites() {
+        guard !subscribed.isEmpty, let adapter else { return }
+        while let next = adapter.session.nextWrite() {
+            let payload = WheelAdapter.swiftBytes(next.data)
+            let result = write(payload, to: next.characteristic, preferred: next.writeType)
+            if result == .busy { return }
+            adapter.session.finishWrite(accepted: result == .accepted, now: uptimeMillis)
+        }
     }
 
     private func publish(_ sample: Telemetry) {
@@ -253,6 +325,8 @@ final class WheelConnection: NSObject, ObservableObject {
     }
 
     private func checkConnection() {
+        adapter?.session.tick(now: uptimeMillis)
+        flushProtocolWrites()
         let now = currentTime
         if state == .live, let lastPacket, now - lastPacket > 2 {
             state = .stale
@@ -284,7 +358,7 @@ final class WheelConnection: NSObject, ObservableObject {
         strobeTimer?.invalidate()
         strobeTimer = nil
         lastPacket = nil
-        awaitingResponse = false
+        awaitingResponse = nil
         queuedSteadyLight = nil
         steadyLight = nil
         lightCommanded = nil
@@ -294,7 +368,12 @@ final class WheelConnection: NSObject, ObservableObject {
         commandStatus = nil
         peripheral?.delegate = nil
         peripheral = nil
-        channel = nil
+        adapter = nil
+        legacySherman = false
+        pendingServices.removeAll()
+        pendingSubscriptions.removeAll()
+        subscribed.removeAll()
+        characteristicsByID.removeAll()
         deviceName = nil
         frame = nil
         speedHistory.removeAll()
@@ -338,14 +417,14 @@ extension WheelConnection: CBCentralManagerDelegate {
         guard scanRequested, (advertisementData[CBAdvertisementDataIsConnectable] as? Bool) != false else { return }
         let name = (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? peripheral.name ?? "Колесо без имени"
         let advertisedServices = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []
-        let upper = name.uppercased()
-        guard upper.hasPrefix("LK") || upper.contains("SHERMAN") || upper.contains("VETERAN") ||
-              upper.contains("LEAPERKIM") || advertisedServices.contains(serviceID) else { return }
-        let device = Device(peripheral: peripheral, name: name, rssi: RSSI.intValue)
+        let hint = WheelAdapter.hint(name)
+        guard hint != nil || !WheelAdapter.serialServices.isDisjoint(with: advertisedServices)
+            || preferredFamily != .automatic else { return }
+        let device = Device(peripheral: peripheral, name: name, rssi: RSSI.intValue, hint: hint)
         devices.removeAll { $0.id == device.id }
         devices.append(device)
         devices.sort { lhs, rhs in
-            if lhs.preferred != rhs.preferred { return lhs.preferred }
+            if (lhs.hint != nil) != (rhs.hint != nil) { return lhs.hint != nil }
             return lhs.rssi > rhs.rssi
         }
     }
@@ -355,7 +434,7 @@ extension WheelConnection: CBCentralManagerDelegate {
         state = .waiting
         status = "Ожидаем телеметрию…"
         peripheral.delegate = self
-        peripheral.discoverServices([serviceID])
+        peripheral.discoverServices(nil)
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -372,74 +451,117 @@ extension WheelConnection: CBCentralManagerDelegate {
 extension WheelConnection: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard peripheral === self.peripheral else { return }
-        guard error == nil, let service = peripheral.services?.first(where: { $0.uuid == serviceID }) else {
-            endConnection(message: "Сервис телеметрии Sherman S недоступен")
+        guard error == nil, let services = peripheral.services, !services.isEmpty else {
+            endConnection(message: "Сервисы Bluetooth моноколеса недоступны")
             return
         }
-        peripheral.discoverCharacteristics([characteristicID], for: service)
+        pendingServices = Set(services.map(\.uuid))
+        for service in services {
+            peripheral.discoverCharacteristics(nil, for: service)
+        }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        guard peripheral === self.peripheral else { return }
-        guard error == nil, let candidate = service.characteristics?.first(where: { $0.uuid == characteristicID }),
-              candidate.properties.contains(.notify) || candidate.properties.contains(.indicate) else {
-            endConnection(message: "Колесо не открыло канал телеметрии")
+        guard peripheral === self.peripheral, pendingServices.remove(service.uuid) != nil,
+              pendingServices.isEmpty else { return }
+        let services = peripheral.services ?? []
+        guard let adapter = WheelAdapter(name: deviceName ?? "", services: services, choice: connectingFamily) else {
+            let message = connectingFamily == .automatic
+                ? "Не удалось определить протокол. Выберите марку в списке «Протокол Bluetooth»."
+                : "Выбранный протокол не совпадает с каналами Bluetooth устройства."
+            endConnection(message: message)
             return
         }
-        channel = candidate
-        peripheral.setNotifyValue(true, for: candidate)
+        self.adapter = adapter
+        for characteristic in services.flatMap({ $0.characteristics ?? [] }) {
+            characteristicsByID[characteristic.uuid.expandedWheelUUID] = characteristic
+        }
+        let candidates = adapter.readUUIDs.compactMap { characteristicsByID[$0] }.filter {
+            $0.properties.contains(.notify) || $0.properties.contains(.indicate)
+        }
+        guard !candidates.isEmpty else {
+            endConnection(message: "Моноколесо не открыло канал телеметрии")
+            return
+        }
+        pendingSubscriptions = Set(candidates.map { $0.uuid.expandedWheelUUID })
+        for candidate in candidates {
+            peripheral.setNotifyValue(true, for: candidate)
+        }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic,
                     error: Error?) {
-        guard peripheral === self.peripheral, characteristic === channel else { return }
-        if error != nil || !characteristic.isNotifying {
+        guard peripheral === self.peripheral, let adapter else { return }
+        let uuid = characteristic.uuid.expandedWheelUUID
+        let initialSubscription = pendingSubscriptions.remove(uuid) != nil
+        if initialSubscription && error == nil && characteristic.isNotifying { subscribed.insert(uuid) }
+        if error != nil || !characteristic.isNotifying { subscribed.remove(uuid) }
+        guard pendingSubscriptions.isEmpty else { return }
+        guard !subscribed.isEmpty else {
             endConnection(message: "Не удалось подписаться на телеметрию колеса")
+            return
         }
+        guard initialSubscription, monitor == nil else { return }
+        adapter.session.start(now: uptimeMillis)
+        flushProtocolWrites()
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in self?.checkConnection() }
+        monitor = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard peripheral === self.peripheral, characteristic === channel,
+        guard peripheral === self.peripheral, let adapter, subscribed.contains(characteristic.uuid.expandedWheelUUID),
               error == nil, let payload = characteristic.value else { return }
-        for sample in decoder.receive(payload) {
-            if lastTelemetryDevice != peripheral.identifier {
-                extrema = RideExtrema()
-                speedHistory.removeAll()
-                lastTelemetryDevice = peripheral.identifier
+        if adapter.family == .leaperkim {
+            for sample in shermanDecoder.receive(payload) {
+                legacySherman = true
+                publish(sample, from: peripheral.identifier)
             }
-            lastPacket = currentTime
-            if state != .live {
-                connectionTimeout?.cancel()
-                connectionTimeout = nil
-                state = .live
-                status = "Телеметрия в реальном времени"
-                if monitor == nil {
-                    monitor = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-                        self?.checkConnection()
-                    }
-                }
-            }
-            frame = sample
-            if let pendingPedalMode, pendingPedalMode == sample.pedalMode {
-                self.pendingPedalMode = nil
-                pedalDeadline = nil
-                commandStatus = "Режим педалей подтверждён"
-            }
-            publish(sample.telemetry)
         }
+        adapter.session.receive(bytes: WheelAdapter.kotlinBytes(payload), now: uptimeMillis)
+        while let reading = adapter.session.takeReading() {
+            if !legacySherman { publish(adapter.frame(reading), from: peripheral.identifier) }
+        }
+        flushProtocolWrites()
+    }
+
+    private func publish(_ sample: WheelFrame, from device: UUID) {
+        if lastTelemetryDevice != device {
+            extrema = RideExtrema()
+            speedHistory.removeAll()
+            lastTelemetryDevice = device
+        }
+        lastPacket = currentTime
+        if state != .live {
+            connectionTimeout?.cancel()
+            connectionTimeout = nil
+            state = .live
+            status = "Телеметрия в реальном времени"
+        }
+        if modelName != sample.model { modelName = sample.model }
+        frame = sample
+        if let pendingPedalMode, pendingPedalMode == sample.pedalMode {
+            self.pendingPedalMode = nil
+            pedalDeadline = nil
+            commandStatus = "Режим педалей подтверждён"
+        }
+        publish(sample.telemetry)
     }
 
     func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
-        if peripheral === self.peripheral { flushSteadyLight() }
+        guard peripheral === self.peripheral else { return }
+        flushSteadyLight()
+        flushProtocolWrites()
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard peripheral === self.peripheral, characteristic === channel else { return }
-        awaitingResponse = false
+        guard peripheral === self.peripheral, characteristic === awaitingResponse else { return }
+        awaitingResponse = nil
         if error != nil {
             if strobe { stopStrobe() }
             commandStatus = "Колесо отклонило команду Bluetooth"
         }
         flushSteadyLight()
+        flushProtocolWrites()
     }
 }

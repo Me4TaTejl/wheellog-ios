@@ -60,7 +60,7 @@ struct Dashboard: View {
             [.init("Ток", frame.current, 1, "А"), .init("Макс. ток", peaks.current, 1, "А")],
             [.init("PWM", frame.pwm, 2, "%"), .init("Макс. PWM", peaks.pwm, 2, "%")],
             [.init("Мощность", frame.power, 0, "Вт"), .init("Макс. мощность", peaks.power, 0, "Вт")],
-            [.init("Темп. мотора", nil, 0, "°C"), .init("Макс. скорость", peaks.speed, 1, "км/ч")]
+            [.init("Темп. мотора", frame.motorTemperature, 0, "°C"), .init("Макс. скорость", peaks.speed, 1, "км/ч")]
         ]
     }
 
@@ -71,7 +71,7 @@ struct Dashboard: View {
             let readingSize = max(1, min(width * 0.079, geometry.size.height * 0.052))
             let readings = rows
             VStack(spacing: 0) {
-                ClassicSpeedometer(frame: wheel.telemetry, extrema: wheel.extrema,
+                ClassicSpeedometer(frame: wheel.telemetry, extrema: wheel.extrema, model: wheel.modelName,
                                    quantity: dialQuantity, showPWM: showPWM, swapSpeedPWM: swapSpeedPWM)
                     .frame(width: dialSize, height: dialSize * 0.80)
                     .padding(.top, 9)
@@ -140,6 +140,7 @@ private struct ClassicSpeedometer: View {
     // Classic dial geometry follows WheelLog.Android 3.2.9 (GPL-3.0).
     let frame: Telemetry
     let extrema: RideExtrema
+    let model: String
     let quantity: DialQuantity
     let showPWM: Bool
     let swapSpeedPWM: Bool
@@ -242,9 +243,13 @@ private struct ClassicSpeedometer: View {
     }
 
     private func drawModel(_ graphics: GraphicsContext, center: CGPoint, radius: CGFloat, size: CGFloat) {
+        let letters = Array(model.prefix(28)).map(String.init)
         let font = UIFont(name: ClassicTypeface.name, size: size) ?? UIFont.systemFont(ofSize: size)
-        let letters = ShermanProtocol.model.map(String.init)
-        let widths = letters.map { $0.size(withAttributes: [.font: font]).width }
+        let width = letters.reduce(CGFloat.zero) { $0 + $1.size(withAttributes: [.font: font]).width }
+        let fit = width > 0 ? min(1, radius * 1.0 / width) : 1
+        let size = size * fit
+        let fitted = font.withSize(size)
+        let widths = letters.map { $0.size(withAttributes: [.font: fitted]).width }
         var offset = -widths.reduce(0, +) / 2
         for (letter, width) in zip(letters, widths) {
             let angle = Double((offset + width / 2) / radius) * 180 / .pi

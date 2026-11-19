@@ -21,7 +21,7 @@
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>WheelLog получает телеметрию Sherman S и отправляет команды фаре и настройкам педалей.</string>
+    <string>WheelLog получает телеметрию моноколеса и отправляет поддерживаемые команды фаре и настройкам педалей.</string>
     <key>NSCameraUsageDescription</key>
     <string>Камера нужна для записи видео поездки с показателями моноколеса.</string>
     <key>NSMicrophoneUsageDescription</key>

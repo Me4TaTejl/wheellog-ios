@@ -220,7 +220,7 @@ private struct ClassicShell: View {
             toolbarButton("ClassicLogging", title: library.logging ? "Завершить CSV" : "Записать CSV",
                           color: library.logging ? RideColors.accent : .white) {
                 if library.logging { library.stopLog() }
-                else if wheel.state == .live || wheel.demo { library.startLog(demo: wheel.demo) }
+                else if wheel.state == .live || wheel.demo { library.startLog(source: wheel.sourceKey) }
                 else { cover = .wheel }
             }
             routeButton
@@ -304,7 +304,7 @@ private struct ClassicShell: View {
     }
 
     private func updateCamera(_ frame: Telemetry) {
-        camera.update(.init(telemetry: frame, demo: wheel.demo, stale: wheel.showingLastReading))
+        camera.update(.init(telemetry: frame, demo: wheel.demo, stale: wheel.showingLastReading, model: wheel.modelName))
     }
 
     private func updateIdleTimer() {

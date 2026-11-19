@@ -7,6 +7,7 @@ struct OverlaySample: Equatable {
     var telemetry = Telemetry()
     var demo = false
     var stale = false
+    var model = "Моноколесо"
 }
 
 enum OverlayLayout {
@@ -43,7 +44,7 @@ enum OverlayLayout {
         if sample.demo { status = "ДЕМО" }
         else if sample.stale { status = "НЕТ СИГНАЛА · ПОСЛЕДНИЕ ДАННЫЕ" }
         else if sample.telemetry.speed == nil { status = "НЕТ ДАННЫХ" }
-        else { status = "SHERMAN S" }
+        else { status = String(sample.model.uppercased().prefix(32)) }
         let statusColor = sample.stale ? CGColor(red: 1, green: 0.39, blue: 0.35, alpha: 1) : muted
         write(status, at: CGPoint(x: 30, y: top + 22), size: 10, color: statusColor, in: context)
         let speedWidth = write(Metric.speed.display(sample.telemetry), at: CGPoint(x: 29, y: top + 63),

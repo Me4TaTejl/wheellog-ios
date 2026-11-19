@@ -40,7 +40,7 @@ final class MovieWriter {
         self.mask = mask
         self.start = CMSampleBufferGetPresentationTimeStamp(firstFrame)
 
-        let filename = RideFiles.filename(prefix: demo ? "Demo_video" : "ShermanS_video", ext: "mp4")
+        let filename = RideFiles.filename(prefix: demo ? "Demo_video" : "WheelLog_video", ext: "mp4")
         let output = try RideFiles.folder("Видео").appending(path: filename)
         let temporary = FileManager.default.temporaryDirectory.appending(path: filename)
         outputURL = output

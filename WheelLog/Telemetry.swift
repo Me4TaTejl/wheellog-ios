@@ -16,6 +16,7 @@ struct Telemetry: Codable, Equatable {
     var phaseCurrent: Double? = nil
     var battery: Double? = nil
     var temperature: Double? = nil
+    var motorTemperature: Double? = nil
     var trip: Double? = nil
     var odometer: Double? = nil
 
@@ -61,6 +62,7 @@ enum Metric: String, CaseIterable, Identifiable {
     case current = "Ток батареи"
     case phaseCurrent = "Фазный ток"
     case temperature = "Температура"
+    case motorTemperature = "Темп. мотора"
     case trip = "Поездка"
     case odometer = "Пробег"
 
@@ -72,7 +74,7 @@ enum Metric: String, CaseIterable, Identifiable {
         case .power: "Вт"
         case .voltage: "В"
         case .current, .phaseCurrent: "А"
-        case .temperature: "°C"
+        case .temperature, .motorTemperature: "°C"
         case .trip, .odometer: "км"
         }
     }
@@ -87,6 +89,7 @@ enum Metric: String, CaseIterable, Identifiable {
         case .current: "estimated_battery_current_a"
         case .phaseCurrent: "phase_current_a"
         case .temperature: "temperature_c"
+        case .motorTemperature: "motor_temperature_c"
         case .trip: "trip_km"
         case .odometer: "odometer_km"
         }
@@ -102,6 +105,7 @@ enum Metric: String, CaseIterable, Identifiable {
         case .phaseCurrent: frame.phaseCurrent
         case .battery: frame.battery
         case .temperature: frame.temperature
+        case .motorTemperature: frame.motorTemperature
         case .trip: frame.trip
         case .odometer: frame.odometer
         }

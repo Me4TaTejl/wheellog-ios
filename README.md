@@ -1,6 +1,19 @@
 # WheelLog для iPhone
 
-Нативное приложение на SwiftUI для LeaperKim Veteran Sherman S. Целевая прошивка — `003.0.15`. При поиске устройства с именами Bluetooth на `LK` или с названием Sherman показываются первыми. После подключения приложение проверяет код модели в пакетах колеса.
+Нативное приложение на SwiftUI для моноколёс с Bluetooth LE. Оно распознаёт протокол по имени и сервисам Bluetooth. При неоднозначном результате выберите семейство в «Колесо → Протокол Bluetooth», запустите поиск и подключитесь снова.
+
+## Поддержка колёс
+
+| Семейство | Телеметрия |
+| --- | --- |
+| Begode / Gotway, Extreme Bull | Классические и новые варианты протокола, в том числе запись с Extreme Bull Rocket |
+| KingSong | Протокол KingSong с показаниями ШИМ и температуры мотора там, где колесо их передаёт |
+| InMotion / Solowheel | Протоколы V1 и V2. В тестах воспроизводятся записи V8S и P6 |
+| LeaperKim / Veteran | Sherman, Abrams, Sherman S, Sherman Max, Patton, Lynx, Sherman L, Patton S, Oryx и Lynx S |
+| NOSFET | Apex, Aero и Aeon по коду модели в телеметрии |
+| Ninebot | Классический протокол One / Mini и отдельный протокол Z |
+
+Список описывает семейства протоколов. Тесты воспроизводят BLE-записи выбранных моделей, а совместимость зависит от модели и прошивки. Для Sherman S сохранён отдельный декодер с тестом прошивки `003.0.15`. Фара и режим педалей доступны там, где приложение поддерживает соответствующие команды. Стробоскоп с регулируемой частотой доступен на Sherman S.
 
 ## Что есть в проекте
 
@@ -25,10 +38,10 @@
 
 ## Установка на iPhone 16 Plus через Xcode
 
-1. На Mac откройте `WheelLog.xcodeproj` в Xcode с поддержкой версии iOS на телефоне. Проект рассчитан на iOS 17 и новее, внешние зависимости не нужны.
+1. На Mac с JDK 21 выполните `bash WheelCore/gradlew -p WheelCore linkReleaseFrameworkIosArm64`, затем откройте `WheelLog.xcodeproj`. Проект требует iOS 17 или новее. Для симулятора на Apple Silicon соберите `linkReleaseFrameworkIosSimulatorArm64`, на Intel — `linkReleaseFrameworkIosX64`.
 2. В **Xcode → Settings → Apple Accounts** войдите в свой Apple Account. В настройках цели **WheelLog → Signing & Capabilities** включите **Automatically manage signing** и выберите свою **Team** или **Personal Team**. Если идентификатор пакета уже занят, укажите свой.
 3. Подключите iPhone, подтвердите доверие к Mac и включите **Developer Mode**, если его потребует Xcode. Выберите iPhone в качестве устройства запуска и нажмите **Run**.
-4. В приложении откройте **Колесо → Найти Sherman S** и выберите колесо из результатов. Если колесо занято, отключите его в DarknessBot или приложении LeaperKim перед поиском.
+4. В приложении откройте **Колесо → Найти моноколесо** и выберите своё устройство. Если колесо занято, отключите его в другом приложении перед поиском.
 
 [Руководство Apple по запуску на устройстве](https://developer.apple.com/documentation/xcode/building-and-running-an-app) · [Developer Mode](https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device)
 
@@ -55,6 +68,8 @@ xcrun swiftc WheelLog/Telemetry.swift WheelLog/ShermanProtocol.swift WheelLog/Ro
 Проект разработан на Windows. GitHub Actions проверяет декодер и расчёт набора высоты и собирает IPA с Apple SDK. Для проверки датчиков и Bluetooth нужны iPhone и колесо.
 
 ## Источники протокола
+
+- [euc_ble_library](https://github.com/Tritbool/euc_ble_library) (GPL-3.0), версия 0.1.3. Используются её протоколы и очередь опроса. [Исходные BLE-записи для тестов](https://github.com/Tritbool/euc_ble_library/tree/2300f85aa52e69a44bc2ee975de0c9708437775c/euc-ble-core/src/test/resources/ble_frames) воспроизводятся с помощью `bash WheelCore/gradlew -p WheelCore jvmTest`.
 
 - [Адаптер Veteran в WheelLog для Android](https://github.com/Wheellog/Wheellog.Android/blob/master/app/src/main/java/com/cooper/wheellog/utils/VeteranAdapter.java) и [расчёт тока и мощности](https://github.com/Wheellog/Wheellog.Android/blob/master/app/src/main/java/com/cooper/wheellog/WheelData.java)
 - [Описание BLE-протокола Veteran / LeaperKim](https://github.com/eried/eucplanet/blob/main/docs/protocols/veteran.md) и [сведения о командах фары Sherman S](https://loeuc.ru/en/docs/wheels)

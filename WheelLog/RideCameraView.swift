@@ -94,7 +94,8 @@ struct RideCameraView: View {
 
     private func preview(bottomInset: CGFloat) -> some View {
         CameraSurface(session: camera.session,
-                      sample: .init(telemetry: wheel.telemetry, demo: wheel.demo, stale: wheel.showingLastReading),
+                      sample: .init(telemetry: wheel.telemetry, demo: wheel.demo, stale: wheel.showingLastReading,
+                                    model: wheel.modelName),
                       mask: mask, ready: camera.preview == .ready, bottomInset: bottomInset)
             .overlay {
                 switch camera.preview {

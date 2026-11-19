@@ -58,7 +58,7 @@ final class RideLibrary: ObservableObject {
     private var logFile: FileHandle?
     private var logURL: URL?
     private var activeRoute: URL?
-    private var isDemoLog = false
+    private var logSource = ""
     private var lastWrite: TimeInterval?
     private var startUptime: TimeInterval?
     private let timestamp: ISO8601DateFormatter = {
@@ -112,11 +112,11 @@ final class RideLibrary: ObservableObject {
         }
     }
 
-    func startLog(demo: Bool) {
+    func startLog(source: String) {
         guard !logging else { return }
         do {
             let folder = try RideFiles.folder(Kind.logs.folder)
-            let url = folder.appending(path: RideFiles.filename(prefix: demo ? "Demo_ride" : "ShermanS", ext: "csv"))
+            let url = folder.appending(path: RideFiles.filename(prefix: source == "demo" ? "Demo_ride" : source, ext: "csv"))
             let columns = ["timestamp_utc", "elapsed_s", "source"] + Metric.allCases.map(\.key)
                 + ["altitude_m", "elevation_gain_m"]
             let header = columns.joined(separator: ",") + "\n"
@@ -125,7 +125,7 @@ final class RideLibrary: ObservableObject {
             try file.seekToEnd()
             logFile = file
             logURL = url
-            isDemoLog = demo
+            logSource = source
             lastWrite = nil
             startUptime = ProcessInfo.processInfo.systemUptime
             recordingStarted = Date()
@@ -137,14 +137,14 @@ final class RideLibrary: ObservableObject {
     }
 
     func append(_ frame: Telemetry, demo: Bool, time: Date, fix: RouteFix?) {
-        guard let logFile, let startUptime, demo == isDemoLog else { return }
+        guard let logFile, let startUptime, demo == (logSource == "demo") else { return }
         let now = ProcessInfo.processInfo.systemUptime
         if let lastWrite, now - lastWrite < 0.095 { return }
         lastWrite = now
         let values = Metric.allCases.map { metric in
             metric.value(in: frame).map { format($0) } ?? ""
         }
-        let fields = [timestamp.string(from: time), format(now - startUptime), demo ? "demo" : "sherman_s"] + values
+        let fields = [timestamp.string(from: time), format(now - startUptime), logSource] + values
             + [fix?.altitude.map(format) ?? "", fix?.ascent.map(format) ?? ""]
         do {
             try logFile.write(contentsOf: Data((fields.joined(separator: ",") + "\n").utf8))

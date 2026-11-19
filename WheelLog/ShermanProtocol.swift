@@ -1,11 +1,12 @@
 import Foundation
 
-struct ShermanFrame {
+struct WheelFrame {
     let telemetry: Telemetry
-    let version: String
+    let version: String?
     let pedalMode: PedalMode?
-    let speedAlarm: Double
-    let tiltBack: Double
+    let speedAlarm: Double?
+    let tiltBack: Double?
+    let model: String
 }
 
 struct ShermanProtocol {
@@ -30,9 +31,9 @@ struct ShermanProtocol {
         return Data(command.utf8)
     }
 
-    mutating func receive(_ chunk: Data) -> [ShermanFrame] {
+    mutating func receive(_ chunk: Data) -> [WheelFrame] {
         bytes.append(contentsOf: chunk)
-        var frames = [ShermanFrame]()
+        var frames = [WheelFrame]()
         while !bytes.isEmpty {
             guard bytes.prefix(Self.header.count).elementsEqual(Self.header.prefix(bytes.count)) else {
                 bytes.removeFirst()
@@ -60,7 +61,7 @@ struct ShermanProtocol {
         return frames
     }
 
-    private static func parse(_ packet: [UInt8], payloadEnd: Int) -> ShermanFrame? {
+    private static func parse(_ packet: [UInt8], payloadEnd: Int) -> WheelFrame? {
         let firmware = be16(packet, 28)
         guard firmware / 1000 == 3 else { return nil }
 
@@ -86,13 +87,14 @@ struct ShermanProtocol {
         let battery = batteryEstimate(voltageRaw)
         let version = String(format: "%03d.%d.%02d", Int(firmware / 1000),
                              Int((firmware % 1000) / 100), Int(firmware % 100))
-        return ShermanFrame(
+        return WheelFrame(
             telemetry: Telemetry(speed: speed, pwm: pwm, power: current.map { $0 * voltage },
                                  voltage: voltage, current: current, phaseCurrent: phaseCurrent,
                                  battery: battery, temperature: temperature,
                                  trip: wordSwappedDistance(packet, 8), odometer: wordSwappedDistance(packet, 12)),
             version: version, pedalMode: mode,
-            speedAlarm: Double(be16(packet, 24)) / 10, tiltBack: Double(be16(packet, 26)) / 10
+            speedAlarm: Double(be16(packet, 24)) / 10, tiltBack: Double(be16(packet, 26)) / 10,
+            model: Self.model
         )
     }
 

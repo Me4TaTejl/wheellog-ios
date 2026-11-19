@@ -14,11 +14,19 @@ permissions:
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Test and build the BLE protocol framework
+        run: bash WheelCore/gradlew -p WheelCore jvmTest linkReleaseFrameworkIosArm64 --console=plain
 
       - name: Check the Sherman S decoder and elevation gain
         run: |
@@ -64,6 +72,7 @@ jobs:
         if: inputs.preview
         timeout-minutes: 6
         run: |
+          bash WheelCore/gradlew -p WheelCore linkReleaseFrameworkIosSimulatorArm64 --console=plain
           runtime=$(xcrun simctl list runtimes --json | python3 -c '
           import json, sys
           ios = [r for r in json.load(sys.stdin)["runtimes"]
