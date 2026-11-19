@@ -38,7 +38,8 @@
 
 ```sh
 test_bin="$(mktemp -d)/sherman-checks"
-xcrun swiftc WheelLog/Telemetry.swift WheelLog/ShermanProtocol.swift WheelLog/RouteAscent.swift +  Tests/ShermanProtocolChecks.swift -o "$test_bin"
+xcrun swiftc WheelLog/Telemetry.swift WheelLog/ShermanProtocol.swift WheelLog/RouteAscent.swift \
+  Tests/ShermanProtocolChecks.swift -o "$test_bin"
 "$test_bin"
 ```
 

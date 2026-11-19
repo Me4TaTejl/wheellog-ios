@@ -71,7 +71,7 @@ struct RideCameraView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.black.ignoresSafeArea())
+        .background(Color.black.ignoresSafeArea())
         .foregroundStyle(.white)
         .sheet(isPresented: $showMetrics) { metricPicker }
         .alert("WheelLog", isPresented: Binding(

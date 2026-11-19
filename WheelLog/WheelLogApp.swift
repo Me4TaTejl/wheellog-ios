@@ -198,36 +198,45 @@ private struct ClassicShell: View {
                 else if wheel.state == .live || wheel.demo { library.startLog(demo: wheel.demo) }
                 else { cover = .wheel }
             }
-            Button { cover = .route } label: {
-                Image(systemName: route.started == nil ? "map" : "location.fill")
-                    .font(.system(size: 19, weight: .medium))
-                    .foregroundStyle(route.started == nil ? Color.white : RideColors.accent)
-                    .frame(width: 38, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel(route.started == nil ? "GPS-маршрут" : "Маршрут записывается")
-            Menu {
-                Button("Настройки экрана", systemImage: "slider.horizontal.3") { cover = .settings }
-                Button("Настройки колеса", systemImage: "gearshape") { cover = .wheel }
-                Button("Поездки", systemImage: "folder") { page = .rides }
-                Button("Журнал событий", systemImage: "list.bullet") { page = .events }
-                Button("Сбросить максимумы", systemImage: "arrow.counterclockwise") {
-                    wheel.resetExtrema()
-                    addEvent("Максимумы сброшены")
-                }
-            } label: {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 19, weight: .medium))
-                    .frame(width: 33, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("Меню")
+            routeButton
+            toolbarMenu
         }
         .foregroundStyle(.white)
         .buttonStyle(.plain)
         .padding(.leading, 13)
         .padding(.trailing, 1)
         .frame(height: 48)
+    }
+
+    private var routeButton: some View {
+        let recording = route.started != nil
+        return Button { cover = .route } label: {
+            Image(systemName: recording ? "location.fill" : "map")
+                .font(.system(size: 19, weight: .medium))
+                .foregroundStyle(recording ? RideColors.accent : Color.white)
+                .frame(width: 38, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(recording ? "Маршрут записывается" : "GPS-маршрут")
+    }
+
+    private var toolbarMenu: some View {
+        Menu {
+            Button("Настройки экрана", systemImage: "slider.horizontal.3") { cover = .settings }
+            Button("Настройки колеса", systemImage: "gearshape") { cover = .wheel }
+            Button("Поездки", systemImage: "folder") { page = .rides }
+            Button("Журнал событий", systemImage: "list.bullet") { page = .events }
+            Button("Сбросить максимумы", systemImage: "arrow.counterclockwise") {
+                wheel.resetExtrema()
+                addEvent("Максимумы сброшены")
+            }
+        } label: {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 19, weight: .medium))
+                .frame(width: 33, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Меню")
     }
 
     private func toolbarButton(_ image: String, title: String, color: Color,

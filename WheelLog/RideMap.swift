@@ -153,7 +153,7 @@ private final class YandexTiles: MKTileOverlay {
             .init(name: "y", value: String(path.y)),
             .init(name: "z", value: String(path.z)),
             .init(name: "l", value: "map"),
-            .init(name: "scale", value: String(min(2, max(1, path.contentScaleFactor)))),
+            .init(name: "scale", value: String(min(2, max(1, Double(path.contentScaleFactor))))),
             .init(name: "projection", value: "web_mercator"),
             .init(name: "maptype", value: "map")
         ]
