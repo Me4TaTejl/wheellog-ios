@@ -325,7 +325,7 @@ struct CameraSurface: UIViewRepresentable {
         }
         view.previewLayer.opacity = ready ? 1 : 0
         view.overlay.sample = sample
-        view.overlay.mask = mask
+        view.overlay.metricMask = mask
         view.overlay.setNeedsDisplay()
     }
 }
@@ -356,11 +356,11 @@ final class CameraPreviewView: UIView {
 
     final class OverlayView: UIView {
         var sample = OverlaySample()
-        var mask = OverlayLayout.defaultMask
+        var metricMask = OverlayLayout.defaultMask
 
         override func draw(_ rect: CGRect) {
             guard let context = UIGraphicsGetCurrentContext() else { return }
-            OverlayLayout.draw(sample, mask: mask, in: bounds.size, context: context)
+            OverlayLayout.draw(sample, mask: metricMask, in: bounds.size, context: context)
         }
     }
 }
