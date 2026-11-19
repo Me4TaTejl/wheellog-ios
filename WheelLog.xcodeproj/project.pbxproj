@@ -20,6 +20,10 @@
 		B733000000000000000000D3 = {isa = PBXBuildFile; fileRef = B7330000000000000000006F /* Assets.xcassets */; };
 		B733000000000000000000D4 = {isa = PBXBuildFile; fileRef = B73300000000000000000071 /* WheelLog-Regular.otf */; };
 		B733000000000000000000D5 = {isa = PBXBuildFile; fileRef = B73300000000000000000072 /* RidePages.swift */; };
+		B733000000000000000000D6 = {isa = PBXBuildFile; fileRef = B73300000000000000000073 /* RouteRecording.swift */; };
+		B733000000000000000000D7 = {isa = PBXBuildFile; fileRef = B73300000000000000000074 /* RouteViews.swift */; };
+		B733000000000000000000D8 = {isa = PBXBuildFile; fileRef = B73300000000000000000075 /* RideMap.swift */; };
+		B733000000000000000000D9 = {isa = PBXBuildFile; fileRef = B73300000000000000000076 /* RouteAscent.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +42,10 @@
 		B7330000000000000000006F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B73300000000000000000071 /* WheelLog-Regular.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "WheelLog-Regular.otf"; sourceTree = "<group>"; };
 		B73300000000000000000072 /* RidePages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RidePages.swift; sourceTree = "<group>"; };
+		B73300000000000000000073 /* RouteRecording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteRecording.swift; sourceTree = "<group>"; };
+		B73300000000000000000074 /* RouteViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteViews.swift; sourceTree = "<group>"; };
+		B73300000000000000000075 /* RideMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideMap.swift; sourceTree = "<group>"; };
+		B73300000000000000000076 /* RouteAscent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteAscent.swift; sourceTree = "<group>"; };
 		B73300000000000000000070 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -64,6 +72,10 @@
 				B7330000000000000000006F /* Assets.xcassets */,
 				B73300000000000000000071 /* WheelLog-Regular.otf */,
 				B73300000000000000000072 /* RidePages.swift */,
+				B73300000000000000000073 /* RouteRecording.swift */,
+				B73300000000000000000074 /* RouteViews.swift */,
+				B73300000000000000000075 /* RideMap.swift */,
+				B73300000000000000000076 /* RouteAscent.swift */,
 				B73300000000000000000070 /* Info.plist */,
 			);
 			path = WheelLog;
@@ -124,6 +136,10 @@
 				B733000000000000000000D1 /* MovieWriter.swift in Sources */,
 				B733000000000000000000D2 /* CameraCapture.swift in Sources */,
 				B733000000000000000000D5 /* RidePages.swift in Sources */,
+				B733000000000000000000D6 /* RouteRecording.swift in Sources */,
+				B733000000000000000000D7 /* RouteViews.swift in Sources */,
+				B733000000000000000000D8 /* RideMap.swift in Sources */,
+				B733000000000000000000D9 /* RouteAscent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -155,10 +171,10 @@
 		B7330000000000000000000E /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
 			ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 2;
+			CURRENT_PROJECT_VERSION = 3;
 			GENERATE_INFOPLIST_FILE = NO;
 			INFOPLIST_FILE = WheelLog/Info.plist;
-			MARKETING_VERSION = 3.2.9;
+			MARKETING_VERSION = 3.2.10;
 			PRODUCT_BUNDLE_IDENTIFIER = local.wheellog.sherman.ios;
 			PRODUCT_NAME = WheelLog;
 			SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -169,10 +185,10 @@
 		B7330000000000000000000F /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
 			ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 2;
+			CURRENT_PROJECT_VERSION = 3;
 			GENERATE_INFOPLIST_FILE = NO;
 			INFOPLIST_FILE = WheelLog/Info.plist;
-			MARKETING_VERSION = 3.2.9;
+			MARKETING_VERSION = 3.2.10;
 			PRODUCT_BUNDLE_IDENTIFIER = local.wheellog.sherman.ios;
 			PRODUCT_NAME = WheelLog;
 			SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

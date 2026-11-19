@@ -26,6 +26,8 @@
     <string>Камера нужна для записи видео поездки с показателями моноколеса.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Микрофон записывает звук в видео поездки.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>WheelLog записывает маршрут, высоту и набор высоты во время GPS-поездки, в том числе при заблокированном экране.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>WheelLog сохраняет выбранные вами ролики в приложении «Фото».</string>
     <key>UIApplicationSceneManifest</key>
@@ -36,6 +38,7 @@
     <key>UIBackgroundModes</key>
     <array>
         <string>bluetooth-central</string>
+        <string>location</string>
     </array>
     <key>UILaunchScreen</key>
     <dict/>

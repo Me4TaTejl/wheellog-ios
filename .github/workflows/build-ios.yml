@@ -20,10 +20,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check the Sherman S decoder
+      - name: Check the Sherman S decoder and elevation gain
         run: |
           xcodebuild -version
-          xcrun swiftc WheelLog/Telemetry.swift WheelLog/ShermanProtocol.swift \
+          xcrun swiftc WheelLog/Telemetry.swift WheelLog/ShermanProtocol.swift WheelLog/RouteAscent.swift \
             Tests/ShermanProtocolChecks.swift -o "$RUNNER_TEMP/sherman-checks"
           "$RUNNER_TEMP/sherman-checks"
 

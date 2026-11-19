@@ -41,6 +41,8 @@ final class WheelConnection: NSObject, ObservableObject {
 
     var onSample: ((Telemetry, Bool, Date) -> Void)?
     var onSourceEnded: (() -> Void)?
+    var onTelemetryLost: ((Date) -> Void)?
+    var showingLastReading: Bool { !demo && state != .live && telemetry.speed != nil }
     var canControl: Bool {
         state == .live && characteristicHasWrite && pendingDisconnect == nil
     }
@@ -51,6 +53,7 @@ final class WheelConnection: NSObject, ObservableObject {
     private var peripheral: CBPeripheral?
     private var channel: CBCharacteristic?
     private var decoder = ShermanProtocol()
+    private var lastTelemetryDevice: UUID?
     private var scanRequested = false
     private var lastPacket: TimeInterval?
     private var monitor: Timer?
@@ -101,7 +104,6 @@ final class WheelConnection: NSObject, ObservableObject {
         stopScan()
         setDemo(false)
         decoder = ShermanProtocol()
-        extrema = RideExtrema()
         commandStatus = nil
         state = .connecting
         status = "Подключение…"
@@ -140,6 +142,7 @@ final class WheelConnection: NSObject, ObservableObject {
         speedHistory.removeAll()
         telemetry = Telemetry()
         extrema = RideExtrema()
+        lastTelemetryDevice = nil
         if enabled {
             stopScan()
             let start = currentTime
@@ -254,8 +257,7 @@ final class WheelConnection: NSObject, ObservableObject {
         if state == .live, let lastPacket, now - lastPacket > 2 {
             state = .stale
             status = "Колесо перестало передавать данные"
-            telemetry = Telemetry()
-            speedHistory.removeAll()
+            onTelemetryLost?(Date())
             stopStrobe()
         }
         if let pedalDeadline, now > pedalDeadline {
@@ -272,6 +274,7 @@ final class WheelConnection: NSObject, ObservableObject {
     }
 
     private func resetConnection(message: String) {
+        if state == .live { onTelemetryLost?(Date()) }
         connectionTimeout?.cancel()
         connectionTimeout = nil
         pendingDisconnect?.cancel()
@@ -294,7 +297,6 @@ final class WheelConnection: NSObject, ObservableObject {
         channel = nil
         deviceName = nil
         frame = nil
-        telemetry = Telemetry()
         speedHistory.removeAll()
         onSourceEnded?()
         state = .idle
@@ -400,6 +402,11 @@ extension WheelConnection: CBPeripheralDelegate {
         guard peripheral === self.peripheral, characteristic === channel,
               error == nil, let payload = characteristic.value else { return }
         for sample in decoder.receive(payload) {
+            if lastTelemetryDevice != peripheral.identifier {
+                extrema = RideExtrema()
+                speedHistory.removeAll()
+                lastTelemetryDevice = peripheral.identifier
+            }
             lastPacket = currentTime
             if state != .live {
                 connectionTimeout?.cancel()

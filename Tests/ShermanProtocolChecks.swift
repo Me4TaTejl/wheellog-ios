@@ -45,6 +45,25 @@ struct ShermanProtocolChecks {
         precondition(ShermanProtocol.pedals(.medium) == Data("SETm".utf8))
         precondition(ShermanProtocol.pedals(.hard) == Data("SETh".utf8))
         print("ShermanProtocol checks passed")
+        checkAscent()
+        print("Route elevation gain checks passed")
+    }
+
+    private static func checkAscent() {
+        let start = Date(timeIntervalSince1970: 0)
+        var ascent = RouteAscent()
+        let altitudes: [Double] = [100, 400, 100, 110, 110, 100, 100, 115, 115]
+        for (second, altitude) in altitudes.enumerated() {
+            ascent.add(altitude: altitude, accuracy: 5, at: start.addingTimeInterval(Double(second)))
+            if second == 2 { precondition(ascent.gain == 0) }
+            if second == 6 { precondition(ascent.gain == 10) }
+        }
+        precondition(ascent.gain == 25)
+        ascent.add(altitude: 200, accuracy: 80, at: start.addingTimeInterval(9))
+        for second in 100...102 {
+            ascent.add(altitude: 400, accuracy: 5, at: start.addingTimeInterval(Double(second)))
+        }
+        precondition(ascent.gain == 25)
     }
 
     private static func frame() -> [UInt8] {

@@ -7,10 +7,11 @@ struct WheelLogApp: App {
     @StateObject private var wheel = WheelConnection()
     @StateObject private var library = RideLibrary()
     @StateObject private var camera = CameraModel()
+    @StateObject private var route = RouteRecorder()
 
     var body: some Scene {
         WindowGroup {
-            ClassicShell(wheel: wheel, library: library, camera: camera)
+            ClassicShell(wheel: wheel, library: library, camera: camera, route: route)
                 .preferredColorScheme(.dark)
         }
     }
@@ -43,20 +44,20 @@ private struct ClassicShell: View {
     private enum Page: String, CaseIterable, Identifiable {
         case instruments = "Приборы"
         case details = "Параметры"
-        case graph = "График"
         case rides = "Поездки"
         case events = "Журнал событий"
         var id: Self { self }
     }
 
     private enum Cover: String, Identifiable {
-        case camera, wheel, settings
+        case camera, wheel, settings, route
         var id: Self { self }
     }
 
     @ObservedObject var wheel: WheelConnection
     @ObservedObject var library: RideLibrary
     @ObservedObject var camera: CameraModel
+    @ObservedObject var route: RouteRecorder
     @Environment(\.scenePhase) private var phase
     @AppStorage("classicClock") private var showClock = true
     @State private var page = Page.instruments
@@ -73,11 +74,18 @@ private struct ClassicShell: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
+            if wheel.showingLastReading {
+                Label("Нет сигнала · последние показания", systemImage: "antenna.radiowaves.left.and.right.slash")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(.red.opacity(0.08))
+            }
             TabView(selection: $page) {
                 Dashboard(wheel: wheel).tag(Page.instruments)
                 TelemetryPage(wheel: wheel).tag(Page.details)
-                TrendPage(wheel: wheel).tag(Page.graph)
-                LibraryView(library: library, camera: camera).tag(Page.rides)
+                LibraryView(library: library, camera: camera) { cover = .route }.tag(Page.rides)
                 EventPage(events: events).tag(Page.events)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
@@ -87,10 +95,13 @@ private struct ClassicShell: View {
         .background(RideColors.background.ignoresSafeArea())
         .tint(RideColors.accent)
         .onAppear {
-            wheel.onSample = { [weak library] frame, demo, time in
-                library?.append(frame, demo: demo, time: time)
+            wheel.onSample = { [weak library, weak route] frame, demo, time in
+                if !demo { route?.append(frame, at: time) }
+                library?.append(frame, demo: demo, time: time, fix: demo ? nil : route?.fixForLog(at: time))
             }
+            wheel.onTelemetryLost = { [weak route] time in route?.wheelLost(at: time) }
             wheel.onSourceEnded = { [weak library] in library?.stopLog() }
+            route.onFileChange = { [weak library] url in library?.setActiveRoute(url) }
             camera.onVideoSaved = { [weak library] in library?.refresh() }
             updateCamera(wheel.telemetry)
             updateIdleTimer()
@@ -99,6 +110,7 @@ private struct ClassicShell: View {
             #endif
         }
         .onReceive(wheel.$telemetry) { updateCamera($0) }
+        .onChange(of: wheel.showingLastReading) { _, _ in updateCamera(wheel.telemetry) }
         .onChange(of: wheel.strobe) { _, _ in updateIdleTimer() }
         .onChange(of: camera.recording) { _, _ in updateIdleTimer() }
         .onChange(of: wheel.status) { _, status in addEvent(status) }
@@ -107,6 +119,9 @@ private struct ClassicShell: View {
         }
         .onChange(of: library.logging) { _, logging in
             addEvent(logging ? "Запись CSV началась" : "Запись CSV завершена")
+        }
+        .onChange(of: route.started) { _, start in
+            addEvent(start == nil ? "Запись GPS завершена" : "Запись GPS началась")
         }
         .onChange(of: library.errorMessage) { _, message in
             if let message { addEvent(message) }
@@ -123,6 +138,8 @@ private struct ClassicShell: View {
             case .camera:
                 RideCameraView(wheel: wheel, camera: camera)
                     .onAppear { if phase == .active { camera.open() } }
+            case .route:
+                LiveRouteView(recorder: route, wheel: wheel)
             }
         }
         .onChange(of: phase) { _, newPhase in
@@ -181,14 +198,17 @@ private struct ClassicShell: View {
                 else if wheel.state == .live || wheel.demo { library.startLog(demo: wheel.demo) }
                 else { cover = .wheel }
             }
-            toolbarButton("ClassicWatch", title: "Фара и стробоскоп",
-                          color: wheel.strobe ? RideColors.accent : .white) {
-                cover = .wheel
+            Button { cover = .route } label: {
+                Image(systemName: route.started == nil ? "map" : "location.fill")
+                    .font(.system(size: 19, weight: .medium))
+                    .foregroundStyle(route.started == nil ? Color.white : RideColors.accent)
+                    .frame(width: 38, height: 44)
+                    .contentShape(Rectangle())
             }
+            .accessibilityLabel(route.started == nil ? "GPS-маршрут" : "Маршрут записывается")
             Menu {
                 Button("Настройки экрана", systemImage: "slider.horizontal.3") { cover = .settings }
                 Button("Настройки колеса", systemImage: "gearshape") { cover = .wheel }
-                Button("График", systemImage: "chart.xyaxis.line") { page = .graph }
                 Button("Поездки", systemImage: "folder") { page = .rides }
                 Button("Журнал событий", systemImage: "list.bullet") { page = .events }
                 Button("Сбросить максимумы", systemImage: "arrow.counterclockwise") {
@@ -250,7 +270,7 @@ private struct ClassicShell: View {
     }
 
     private func updateCamera(_ frame: Telemetry) {
-        camera.update(.init(telemetry: frame, demo: wheel.demo))
+        camera.update(.init(telemetry: frame, demo: wheel.demo, stale: wheel.showingLastReading))
     }
 
     private func updateIdleTimer() {

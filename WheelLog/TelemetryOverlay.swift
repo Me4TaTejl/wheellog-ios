@@ -6,6 +6,7 @@ import UIKit
 struct OverlaySample: Equatable {
     var telemetry = Telemetry()
     var demo = false
+    var stale = false
 }
 
 enum OverlayLayout {
@@ -18,14 +19,15 @@ enum OverlayLayout {
         }
     }
 
-    static func draw(_ sample: OverlaySample, mask: Int, in size: CGSize, context: CGContext) {
+    static func draw(_ sample: OverlaySample, mask: Int, in size: CGSize, context: CGContext,
+                     bottomInset: CGFloat = 0) {
         let scale = size.width / 360
         guard scale > 0, size.height / scale > 210 else { return }
         let height = size.height / scale
         let metrics = metrics(for: mask)
         let rowCount = (metrics.count + 2) / 3
         let panelHeight = CGFloat(86 + rowCount * 41)
-        let top = height - panelHeight - 19
+        let top = max(0, height - panelHeight - 19 - bottomInset / scale)
         let accent = CGColor(red: 0.84, green: 0.99, blue: 0.38, alpha: 1)
         let muted = CGColor(red: 0.75, green: 0.79, blue: 0.74, alpha: 1)
         let white = CGColor(gray: 1, alpha: 1)
@@ -39,9 +41,11 @@ enum OverlayLayout {
 
         let status: String
         if sample.demo { status = "ДЕМО" }
+        else if sample.stale { status = "НЕТ СИГНАЛА · ПОСЛЕДНИЕ ДАННЫЕ" }
         else if sample.telemetry.speed == nil { status = "НЕТ ДАННЫХ" }
         else { status = "SHERMAN S" }
-        write(status, at: CGPoint(x: 30, y: top + 22), size: 10, color: muted, in: context)
+        let statusColor = sample.stale ? CGColor(red: 1, green: 0.39, blue: 0.35, alpha: 1) : muted
+        write(status, at: CGPoint(x: 30, y: top + 22), size: 10, color: statusColor, in: context)
         let speedWidth = write(Metric.speed.display(sample.telemetry), at: CGPoint(x: 29, y: top + 63),
                                size: 39, color: accent, in: context)
         write(Metric.speed.unit, at: CGPoint(x: 36 + speedWidth, y: top + 62),

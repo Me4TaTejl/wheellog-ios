@@ -18,12 +18,35 @@ enum RideFiles {
 }
 
 final class RideLibrary: ObservableObject {
+    enum Kind: String, CaseIterable, Identifiable {
+        case routes = "Маршруты"
+        case logs = "Логи CSV"
+        case videos = "Видео"
+
+        var id: Self { self }
+        var folder: String { self == .logs ? "Поездки" : rawValue }
+        var fileExtension: String {
+            switch self {
+            case .routes: "jsonl"
+            case .logs: "csv"
+            case .videos: "mp4"
+            }
+        }
+        var icon: String {
+            switch self {
+            case .routes: "map"
+            case .logs: "doc.text"
+            case .videos: "film"
+            }
+        }
+    }
+
     struct Item: Identifiable {
         let url: URL
         let date: Date
         let bytes: Int
+        let kind: Kind
         var id: URL { url }
-        var isVideo: Bool { url.pathExtension == "mp4" }
         var demo: Bool { url.lastPathComponent.hasPrefix("Demo") }
     }
 
@@ -34,6 +57,7 @@ final class RideLibrary: ObservableObject {
 
     private var logFile: FileHandle?
     private var logURL: URL?
+    private var activeRoute: URL?
     private var isDemoLog = false
     private var lastWrite: TimeInterval?
     private var startUptime: TimeInterval?
@@ -47,17 +71,23 @@ final class RideLibrary: ObservableObject {
         refresh()
     }
 
+    func setActiveRoute(_ url: URL?) {
+        activeRoute = url
+        refresh()
+    }
+
     func refresh() {
         do {
             let keys: [URLResourceKey] = [.creationDateKey, .fileSizeKey]
             var files = [Item]()
-            for (folder, ext) in [("Поездки", "csv"), ("Видео", "mp4")] {
+            for kind in Kind.allCases {
                 let urls = try FileManager.default.contentsOfDirectory(
-                    at: RideFiles.folder(folder), includingPropertiesForKeys: keys, options: .skipsHiddenFiles
+                    at: RideFiles.folder(kind.folder), includingPropertiesForKeys: keys, options: .skipsHiddenFiles
                 )
-                for url in urls where url.pathExtension == ext && url != logURL {
+                for url in urls where url.pathExtension == kind.fileExtension && url != logURL && url != activeRoute {
                     let values = try? url.resourceValues(forKeys: Set(keys))
-                    files.append(.init(url: url, date: values?.creationDate ?? .distantPast, bytes: values?.fileSize ?? 0))
+                    files.append(.init(url: url, date: values?.creationDate ?? .distantPast,
+                                       bytes: values?.fileSize ?? 0, kind: kind))
                 }
             }
             items = files.sorted { $0.date > $1.date }
@@ -66,12 +96,30 @@ final class RideLibrary: ObservableObject {
         }
     }
 
+    func delete(_ item: Item) -> Bool {
+        guard items.contains(where: { $0.id == item.id }), item.url != logURL, item.url != activeRoute else {
+            return false
+        }
+        do {
+            try FileManager.default.removeItem(at: item.url)
+            errorMessage = nil
+            refresh()
+            return true
+        } catch {
+            errorMessage = "Не удалось удалить запись."
+            refresh()
+            return false
+        }
+    }
+
     func startLog(demo: Bool) {
         guard !logging else { return }
         do {
-            let folder = try RideFiles.folder("Поездки")
+            let folder = try RideFiles.folder(Kind.logs.folder)
             let url = folder.appending(path: RideFiles.filename(prefix: demo ? "Demo_ride" : "ShermanS", ext: "csv"))
-            let header = (["timestamp_utc", "elapsed_s", "source"] + Metric.allCases.map(\.key)).joined(separator: ",") + "\n"
+            let columns = ["timestamp_utc", "elapsed_s", "source"] + Metric.allCases.map(\.key)
+                + ["altitude_m", "elevation_gain_m"]
+            let header = columns.joined(separator: ",") + "\n"
             try Data(header.utf8).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             let file = try FileHandle(forWritingTo: url)
             try file.seekToEnd()
@@ -88,7 +136,7 @@ final class RideLibrary: ObservableObject {
         }
     }
 
-    func append(_ frame: Telemetry, demo: Bool, time: Date) {
+    func append(_ frame: Telemetry, demo: Bool, time: Date, fix: RouteFix?) {
         guard let logFile, let startUptime, demo == isDemoLog else { return }
         let now = ProcessInfo.processInfo.systemUptime
         if let lastWrite, now - lastWrite < 0.095 { return }
@@ -97,6 +145,7 @@ final class RideLibrary: ObservableObject {
             metric.value(in: frame).map { format($0) } ?? ""
         }
         let fields = [timestamp.string(from: time), format(now - startUptime), demo ? "demo" : "sherman_s"] + values
+            + [fix?.altitude.map(format) ?? "", fix?.ascent.map(format) ?? ""]
         do {
             try logFile.write(contentsOf: Data((fields.joined(separator: ",") + "\n").utf8))
         } catch {

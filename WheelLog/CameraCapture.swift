@@ -100,6 +100,10 @@ final class CameraModel: ObservableObject {
         engine.update(sample)
     }
 
+    func forgetVideo(_ url: URL) {
+        if latestVideo == url { latestVideo = nil }
+    }
+
     func startRecording(mask: Int, demo: Bool) {
         guard canRecord else { return }
         recording = .starting
@@ -313,6 +317,7 @@ struct CameraSurface: UIViewRepresentable {
     var sample: OverlaySample
     var mask: Int
     var ready: Bool
+    var bottomInset: CGFloat
 
     func makeUIView(context: Context) -> CameraPreviewView {
         CameraPreviewView(session: session)
@@ -326,6 +331,7 @@ struct CameraSurface: UIViewRepresentable {
         view.previewLayer.opacity = ready ? 1 : 0
         view.overlay.sample = sample
         view.overlay.metricMask = mask
+        view.overlay.bottomInset = bottomInset
         view.overlay.setNeedsDisplay()
     }
 }
@@ -338,7 +344,7 @@ final class CameraPreviewView: UIView {
         previewLayer = AVCaptureVideoPreviewLayer(session: session)
         super.init(frame: .zero)
         backgroundColor = .black
-        previewLayer.videoGravity = .resizeAspect
+        previewLayer.videoGravity = .resizeAspectFill
         layer.addSublayer(previewLayer)
         overlay.isOpaque = false
         overlay.backgroundColor = .clear
@@ -357,10 +363,11 @@ final class CameraPreviewView: UIView {
     final class OverlayView: UIView {
         var sample = OverlaySample()
         var metricMask = OverlayLayout.defaultMask
+        var bottomInset: CGFloat = 0
 
         override func draw(_ rect: CGRect) {
             guard let context = UIGraphicsGetCurrentContext() else { return }
-            OverlayLayout.draw(sample, mask: metricMask, in: bounds.size, context: context)
+            OverlayLayout.draw(sample, mask: metricMask, in: bounds.size, context: context, bottomInset: bottomInset)
         }
     }
 }

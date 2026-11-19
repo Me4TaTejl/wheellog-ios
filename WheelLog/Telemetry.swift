@@ -7,7 +7,7 @@ enum PedalMode: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
-struct Telemetry: Equatable {
+struct Telemetry: Codable, Equatable {
     var speed: Double? = nil
     var pwm: Double? = nil
     var power: Double? = nil
