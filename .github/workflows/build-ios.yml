@@ -1,0 +1,56 @@
+name: Build WheelLog IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check the Sherman S decoder
+        run: |
+          xcodebuild -version
+          xcrun swiftc WheelLog/Telemetry.swift WheelLog/ShermanProtocol.swift \
+            Tests/ShermanProtocolChecks.swift -o "$RUNNER_TEMP/sherman-checks"
+          "$RUNNER_TEMP/sherman-checks"
+
+      - name: Build for iPhone
+        run: |
+          xcodebuild build \
+            -project WheelLog.xcodeproj \
+            -scheme WheelLog \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/wheellog-build" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=
+
+      - name: Package unsigned IPA
+        run: |
+          app="$RUNNER_TEMP/wheellog-build/Build/Products/Release-iphoneos/WheelLog.app"
+          stage="$RUNNER_TEMP/wheellog-stage"
+          ipa="$RUNNER_TEMP/WheelLog.ipa"
+
+          test -x "$app/WheelLog"
+          xcrun lipo -verify_arch arm64 "$app/WheelLog"
+          mkdir -p "$stage/Payload"
+          ditto "$app" "$stage/Payload/WheelLog.app"
+          ditto -c -k --keepParent "$stage/Payload" "$ipa"
+          unzip -tq "$ipa"
+
+      - name: Publish the workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: WheelLog-iOS
+          path: ${{ runner.temp }}/WheelLog.ipa
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
