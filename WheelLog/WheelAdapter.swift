@@ -77,7 +77,7 @@ struct WheelAdapter {
         }
         return WheelFrame(
             telemetry: Telemetry(speed: reading.speed, pwm: reading.pwm?.doubleValue,
-                                 power: reading.power?.doubleValue, voltage: reading.voltage,
+                                 power: reading.power?.doubleValue, voltage: reading.voltage?.doubleValue,
                                  current: reading.current?.doubleValue, phaseCurrent: reading.phaseCurrent?.doubleValue,
                                  battery: reading.battery?.doubleValue, temperature: reading.temperature,
                                  motorTemperature: reading.motorTemperature?.doubleValue,
@@ -91,7 +91,7 @@ struct WheelAdapter {
 extension CBUUID {
     var expandedWheelUUID: String {
         let uuid = uuidString.lowercased()
-        switch uuid.count {
+        return switch uuid.count {
         case 4: "0000\(uuid)-0000-1000-8000-00805f9b34fb"
         case 8: "\(uuid)-0000-1000-8000-00805f9b34fb"
         default: uuid

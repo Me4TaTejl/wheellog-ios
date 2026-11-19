@@ -26,6 +26,7 @@ import io.github.tritbool.euc.ble.session.ProtocolSelector
 import io.github.tritbool.euc.ble.session.ProtocolSession
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlin.time.Clock
 
@@ -38,8 +39,8 @@ private enum class Family(val key: String) {
         EXTREME_BULL -> ExtremeBullSyncProtocol(WheelClock)
         KINGSONG -> KingsongSyncProtocol(WheelClock, EucRandom { Random.nextInt(it) })
         INMOTION -> InMotionSyncProtocol(WheelClock)
-        NINEBOT -> NinebotSyncProtocol(WheelClock)
-        NINEBOT_Z -> NinebotZSyncProtocol(WheelClock)
+        NINEBOT -> NinebotReader(false, NinebotSyncProtocol(WheelClock))
+        NINEBOT_Z -> NinebotReader(true, NinebotZSyncProtocol(WheelClock))
         LEAPERKIM -> LeaperkimSyncProtocol(WheelClock)
         NOSFET -> NosfetSyncProtocol(WheelClock)
     }
@@ -47,6 +48,15 @@ private enum class Family(val key: String) {
     companion object {
         fun fromKey(key: String) = entries.firstOrNull { it.key == key }
     }
+}
+
+private class XenoProtocol : LeaperkimSyncProtocol(WheelClock) {
+    override val manufacturer = "Nosfet"
+    override val protocolId = "NosfetProtocol"
+    override fun modelByMajorVersion(version: Int) = "Nosfet Xeno"
+    override fun bmsCellCount(majorVersion: Int?) = 30
+    override fun estimateBatteryPercent(voltageRaw: Int, majorVersion: Int): Int =
+        ((voltageRaw - 9918) * 100.0 / (12337 - 9918)).roundToInt().coerceIn(0, 100)
 }
 
 private object WheelClock : EucClock {
@@ -94,7 +104,7 @@ class WheelDetection {
             label.hasAny("nosfet", "apex", "aero", "aeon", "xeno") -> Family.NOSFET
             label.startsWith("lk") || label.hasAny("leaperkim", "veteran", "sherman", "patton", "lynx", "oryx") ->
                 Family.LEAPERKIM
-            label.startsWith("ks-") || label.startsWith("ks_") || label.hasAny("kingsong", "king song") ->
+            Regex("^ks[-_0-9]").containsMatchIn(label) || label.hasAny("kingsong", "king song") ->
                 Family.KINGSONG
             label.hasAny("extreme bull", "extremebull", "commander", "eb rocket") || label.startsWith("eb-") ->
                 Family.EXTREME_BULL
@@ -116,12 +126,12 @@ class WheelReading internal constructor(data: EUCData, phaseOnly: Boolean, begod
     val model = data.model
     val version = data.firmwareVersion
     val speed = data.speed
-    val voltage = data.voltage
+    val voltage = data.voltage.takeIf { it > 0 }
     val battery = data.batteryLevel.toDouble().takeIf { it in 0.0..100.0 }
     val temperature = data.temperature
     val motorTemperature = data.motorTemperature
     val pwm = data.pwm?.takeIf {
-        it in 0.0..100.0 && (!phaseOnly || (data.rawData[3].toInt() and 0xff) >= 36)
+        it in 0.0..100.0 && (!phaseOnly || (data.rawData.getOrElse(3) { 0 }.toInt() and 0xff) >= 36)
     }
     // WheelLog.Android documents LeaperKim's wire field in tenths of a phase amp.
     val phaseCurrent = if (phaseOnly) data.current * 10 else data.phaseCurrent
@@ -130,7 +140,9 @@ class WheelReading internal constructor(data: EUCData, phaseOnly: Boolean, begod
         begodeBatteryCurrent == false -> pwm?.let { data.current * it / 100 }
         else -> data.current
     }
-    val power = current?.let { data.voltage * it }
+    val power = if (voltage == null) null else if (phaseOnly || begodeBatteryCurrent == false) {
+        current?.let { voltage * it }
+    } else data.power
     val trip = data.wheelDistance ?: data.distance
     val odometer = data.totalDistance
     val pedalMode = data.pedalsMode
@@ -162,8 +174,9 @@ class WheelProtocol internal constructor(val family: String, private var decoder
     }
 
     fun receive(bytes: ByteArray, now: Long) {
-        polling.onResponse(now) { decoder.matchesQueryResponse(it, bytes) }
+        if (decoder !is NinebotReader) polling.onResponse(now) { decoder.matchesQueryResponse(it, bytes) }
         session.onNotification(bytes, now)
+        if (decoder is NinebotReader) polling.onResponse(now) { decoder.matchesQueryResponse(it, bytes) }
         drain(now)
         tick(now)
     }
@@ -225,21 +238,32 @@ class WheelProtocol internal constructor(val family: String, private var decoder
             when (val output = session.pollOutput() ?: return) {
                 is ProtocolOutput.Telemetry -> {
                     val data = output.data
-                    if (decoder is LeaperkimSyncProtocol && decoder !is NosfetSyncProtocol &&
-                        data.firmwareVersion?.substringBefore('.')?.toIntOrNull()?.let { it in 42..44 } == true
-                    ) {
-                        decoder = NosfetSyncProtocol(WheelClock)
+                    val variant = refinedDecoder(data)
+                    if (variant != null) {
+                        decoder = variant
                         session = ProtocolSession(decoder)
                         polling = PollingEngine(decoder.manufacturer)
                         writes.clear()
                         session.onNotification(data.rawData, now)
-                    } else if (data.voltage in 15.0..300.0 && data.speed in -250.0..250.0) {
+                    } else if ((data.voltage in 15.0..300.0 || data.model == "Ninebot Mini") &&
+                               data.speed in -250.0..250.0) {
                         readings.addLast(mapReading(data))
                     }
                 }
                 is ProtocolOutput.Write -> writes.addLast(packet(output.payload))
                 else -> Unit
             }
+        }
+    }
+
+    private fun refinedDecoder(data: EUCData): SyncEucProtocol? {
+        if (decoder !is LeaperkimSyncProtocol) return null
+        val major = data.firmwareVersion?.substringBefore('.')?.toIntOrNull() ?: return null
+        return when {
+            major == 45 && decoder !is XenoProtocol -> XenoProtocol()
+            major in 42..44 && decoder !is NosfetSyncProtocol -> NosfetSyncProtocol(WheelClock)
+            major in 0..9 && (decoder is NosfetSyncProtocol || decoder is XenoProtocol) -> LeaperkimSyncProtocol(WheelClock)
+            else -> null
         }
     }
 
