@@ -32,6 +32,7 @@ enum WheelFamily: String, CaseIterable, Identifiable {
 struct WheelAdapter {
     let session: WheelProtocol
     let family: WheelFamily
+    let isRockwheel: Bool
 
     static let serialServices = Set([CBUUID(string: "FFE0"), CBUUID(string: "6E400001-B5A3-F393-E0A9-E50E24DCCA9E")])
     private static let detection = WheelDetection()
@@ -50,6 +51,8 @@ struct WheelAdapter {
               let family = WheelFamily(rawValue: session.family) else { return nil }
         self.session = session
         self.family = family
+        let label = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        isRockwheel = family == .kingsong && (label == "rw" || label.hasPrefix("rockw"))
     }
 
     var readUUIDs: Set<String> { Set(session.notificationUUIDs) }
@@ -68,7 +71,7 @@ struct WheelAdapter {
     }
 
     func frame(_ reading: WheelReading) -> WheelFrame {
-        let model = reading.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = isRockwheel ? "Rockwheel" : reading.model.trimmingCharacters(in: .whitespacesAndNewlines)
         let mode: PedalMode? = switch reading.pedalMode?.intValue {
         case 0: .hard
         case 1: .medium

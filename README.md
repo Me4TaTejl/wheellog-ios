@@ -7,7 +7,7 @@
 | Семейство | Телеметрия |
 | --- | --- |
 | Begode / Gotway, Extreme Bull | Классические и новые варианты протокола, в том числе запись с Extreme Bull Rocket |
-| KingSong | Протокол KingSong с показаниями ШИМ и температуры мотора там, где колесо их передаёт |
+| KingSong, совместимые Rockwheel | Протокол KingSong с показаниями ШИМ и температуры мотора там, где колесо их передаёт |
 | InMotion / Solowheel | Протоколы V1 и V2. В тестах воспроизводятся записи V8S и P6 |
 | LeaperKim / Veteran | Sherman, Abrams, Sherman S, Sherman Max, Patton, Lynx, Sherman L, Patton S, Oryx и Lynx S |
 | NOSFET | Apex, Aero, Aeon и Xeno по коду модели в телеметрии |

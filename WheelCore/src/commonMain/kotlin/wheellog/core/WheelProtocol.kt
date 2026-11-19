@@ -95,6 +95,7 @@ class WheelDetection {
             // For legacy, let the decoder see the first V1 frame after its startup query.
             if (v1 !in available) decoder.setDialect(2)
         }
+        if (decoder is NinebotReader) decoder.selectChannel(available)
         return WheelProtocol(checkNotNull(family).key, decoder)
     }
 
@@ -104,6 +105,7 @@ class WheelDetection {
             label.hasAny("nosfet", "apex", "aero", "aeon", "xeno") -> Family.NOSFET
             label.startsWith("lk") || label.hasAny("leaperkim", "veteran", "sherman", "patton", "lynx", "oryx") ->
                 Family.LEAPERKIM
+            label == "rw" || label.startsWith("rockw") -> Family.KINGSONG
             Regex("^ks[-_0-9]").containsMatchIn(label) || label.hasAny("kingsong", "king song") ->
                 Family.KINGSONG
             label.hasAny("extreme bull", "extremebull", "commander", "eb rocket") || label.startsWith("eb-") ->

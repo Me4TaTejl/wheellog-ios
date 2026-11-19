@@ -46,6 +46,7 @@ final class WheelConnection: NSObject, ObservableObject {
         if demo { return "demo" }
         if modelName == ShermanProtocol.model { return "sherman_s" }
         if modelName.lowercased().hasPrefix("nosfet") { return "nosfet" }
+        if adapter?.isRockwheel == true { return "rockwheel" }
         return adapter?.family.rawValue ?? "wheel"
     }
     var canControlLight: Bool { canWriteSettings && (legacySherman || adapter?.session.hasHeadlight == true) }
@@ -86,7 +87,7 @@ final class WheelConnection: NSObject, ObservableObject {
 
     private var uptimeMillis: Int64 { Int64(currentTime * 1_000) }
     private var canWriteSettings: Bool {
-        guard state == .live, pendingDisconnect == nil, let adapter, let lastPacket,
+        guard state == .live, pendingDisconnect == nil, let adapter, !adapter.isRockwheel, let lastPacket,
               currentTime - lastPacket < 2, let output = characteristicsByID[adapter.writeUUID] else { return false }
         return output.properties.contains(.writeWithoutResponse) || output.properties.contains(.write)
     }

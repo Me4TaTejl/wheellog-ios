@@ -1,5 +1,7 @@
 package wheellog.core
 
+import io.github.tritbool.euc.ble.core.BLEConstants
+import io.github.tritbool.euc.ble.core.EucUuid
 import io.github.tritbool.euc.ble.models.EUCData
 import io.github.tritbool.euc.ble.protocols.CommandType
 import io.github.tritbool.euc.ble.protocols.CommandValue
@@ -20,8 +22,19 @@ internal class NinebotReader(
     private var streamKey = ByteArray(16)
     private var bleInitialized = !isZ
     private var classicAddress = 0
+    private var useUart = isZ
 
     override val supportedCommandTypes: Set<CommandType> = emptySet()
+
+    override fun getCandidateDataCharacteristicUUIDs(): List<EucUuid> =
+        if (isZ) listOf(UART_READ) else listOf(CLASSIC_DATA, UART_READ)
+
+    fun selectChannel(available: Set<EucUuid>) {
+        useUart = isZ || CLASSIC_DATA !in available
+    }
+
+    override fun getDataCharacteristicUUID(): EucUuid = if (useUart) UART_READ else CLASSIC_DATA
+    override fun getWriteCharacteristicUUID(): EucUuid = if (useUart) UART_WRITE else CLASSIC_DATA
 
     override fun resetSession() {
         transport.resetSession()
@@ -157,6 +170,9 @@ internal class NinebotReader(
 
     companion object {
         private const val SESSION_KEY = 0x100
+        private val CLASSIC_DATA = EucUuid.parse(BLEConstants.NINEBOT_READ_CHARACTERISTIC)
+        private val UART_READ = EucUuid.parse(BLEConstants.NINEBOT_Z_READ_CHARACTERISTIC)
+        private val UART_WRITE = EucUuid.parse(BLEConstants.NINEBOT_Z_WRITE_CHARACTERISTIC)
         private val CLASSIC_ADDRESSES = listOf(0x09, 0x11, 0x0a)
     }
 }

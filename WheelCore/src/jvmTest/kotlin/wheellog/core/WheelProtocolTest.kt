@@ -19,11 +19,15 @@ class WheelProtocolTest {
         assertEquals("leaperkim", detection.hint("LK11513"))
         assertEquals("nosfet", detection.hint("NOSFET Aeon"))
         assertEquals("kingsong", detection.hint("KS-18XL"))
+        assertEquals("kingsong", detection.select("Rockwheel GT16", listOf("$serial,$ffe1"), "")?.family)
         assertEquals("inmotion", detection.hint("InMotion V8S"))
         assertNull(detection.select("speaker", emptyList(), "begode"))
         assertNull(detection.select("speaker", listOf(uart), "begode"))
         assertEquals("ninebot_z", detection.select("Ninebot Z10", listOf(uart), "")?.family)
         assertEquals("ninebot", detection.select("Ninebot One S2", listOf("$serial,$ffe1"), "")?.family)
+        val s2 = assertNotNull(detection.select("Ninebot One S2", listOf(uart), ""))
+        s2.start(0)
+        assertEquals("6e400002-b5a3-f393-e0a9-e50e24dcca9e", s2.nextWrite()?.characteristic)
     }
 
     @Test
