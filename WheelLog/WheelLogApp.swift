@@ -114,17 +114,25 @@ private struct ClassicShell: View {
         .tint(RideColors.accent)
     }
 
-    private var observedDashboard: some View {
+    private var dashboardWithLifecycle: some View {
         dashboard
             .onAppear(perform: connectObservers)
-            .onReceive(wheel.$telemetry, perform: updateCamera)
+            .onReceive(wheel.$telemetry) { frame in updateCamera(frame) }
             .onChange(of: wheel.showingLastReading) { _, _ in updateCamera(wheel.telemetry) }
             .onChange(of: wheel.strobe) { _, _ in updateIdleTimer() }
             .onChange(of: camera.recording) { _, _ in updateIdleTimer() }
+    }
+
+    private var dashboardWithWheelEvents: some View {
+        dashboardWithLifecycle
             .onChange(of: wheel.status) { _, status in addEvent(status) }
             .onChange(of: wheel.commandStatus) { _, status in
                 if let status { addEvent(status) }
             }
+    }
+
+    private var observedDashboard: some View {
+        dashboardWithWheelEvents
             .onChange(of: library.logging) { _, logging in
                 addEvent(logging ? "Запись CSV началась" : "Запись CSV завершена")
             }
