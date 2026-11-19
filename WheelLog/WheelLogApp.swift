@@ -72,6 +72,24 @@ private struct ClassicShell: View {
     }()
 
     var body: some View {
+        observedDashboard
+            .fullScreenCover(item: $cover, onDismiss: { camera.close() }, content: coverContent)
+            .onChange(of: phase) { _, newPhase in phaseChanged(newPhase) }
+            .alert("WheelLog", isPresented: cameraAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(camera.message ?? "")
+            }
+    }
+
+    private var cameraAlert: Binding<Bool> {
+        Binding<Bool>(
+            get: { cover != .camera && camera.message != nil },
+            set: { presented in if !presented { camera.message = nil } }
+        )
+    }
+
+    private var dashboard: some View {
         VStack(spacing: 0) {
             toolbar
             if wheel.showingLastReading {
@@ -94,73 +112,72 @@ private struct ClassicShell: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RideColors.background.ignoresSafeArea())
         .tint(RideColors.accent)
-        .onAppear {
-            wheel.onSample = { [weak library, weak route] frame, demo, time in
-                if !demo { route?.append(frame, at: time) }
-                library?.append(frame, demo: demo, time: time, fix: demo ? nil : route?.fixForLog(at: time))
+    }
+
+    private var observedDashboard: some View {
+        dashboard
+            .onAppear(perform: connectObservers)
+            .onReceive(wheel.$telemetry, perform: updateCamera)
+            .onChange(of: wheel.showingLastReading) { _, _ in updateCamera(wheel.telemetry) }
+            .onChange(of: wheel.strobe) { _, _ in updateIdleTimer() }
+            .onChange(of: camera.recording) { _, _ in updateIdleTimer() }
+            .onChange(of: wheel.status) { _, status in addEvent(status) }
+            .onChange(of: wheel.commandStatus) { _, status in
+                if let status { addEvent(status) }
             }
-            wheel.onTelemetryLost = { [weak route] time in route?.wheelLost(at: time) }
-            wheel.onSourceEnded = { [weak library] in library?.stopLog() }
-            route.onFileChange = { [weak library] url in library?.setActiveRoute(url) }
-            camera.onVideoSaved = { [weak library] in library?.refresh() }
-            updateCamera(wheel.telemetry)
-            updateIdleTimer()
-            #if targetEnvironment(simulator)
-            if ProcessInfo.processInfo.arguments.contains("--demo") { wheel.setDemo(true) }
-            #endif
-        }
-        .onReceive(wheel.$telemetry) { updateCamera($0) }
-        .onChange(of: wheel.showingLastReading) { _, _ in updateCamera(wheel.telemetry) }
-        .onChange(of: wheel.strobe) { _, _ in updateIdleTimer() }
-        .onChange(of: camera.recording) { _, _ in updateIdleTimer() }
-        .onChange(of: wheel.status) { _, status in addEvent(status) }
-        .onChange(of: wheel.commandStatus) { _, status in
-            if let status { addEvent(status) }
-        }
-        .onChange(of: library.logging) { _, logging in
-            addEvent(logging ? "Запись CSV началась" : "Запись CSV завершена")
-        }
-        .onChange(of: route.started) { _, start in
-            addEvent(start == nil ? "Запись GPS завершена" : "Запись GPS началась")
-        }
-        .onChange(of: library.errorMessage) { _, message in
-            if let message { addEvent(message) }
-        }
-        .onChange(of: camera.latestVideo) { _, url in
-            if url != nil { addEvent("Видео сохранено") }
-        }
-        .fullScreenCover(item: $cover, onDismiss: { camera.close() }) { item in
-            switch item {
-            case .wheel:
-                WheelControls(wheel: wheel)
-            case .settings:
-                ClassicSettings()
-            case .camera:
-                RideCameraView(wheel: wheel, camera: camera)
-                    .onAppear { if phase == .active { camera.open() } }
-            case .route:
-                LiveRouteView(recorder: route, wheel: wheel)
+            .onChange(of: library.logging) { _, logging in
+                addEvent(logging ? "Запись CSV началась" : "Запись CSV завершена")
             }
-        }
-        .onChange(of: phase) { _, newPhase in
-            if newPhase != .active { wheel.stopStrobe() }
-            if newPhase == .background {
-                camera.close()
-                wheel.stopScan()
+            .onChange(of: route.started) { _, start in
+                addEvent(start == nil ? "Запись GPS завершена" : "Запись GPS началась")
             }
-            if newPhase == .active, cover == .camera {
-                camera.open()
+            .onChange(of: library.errorMessage) { _, message in
+                if let message { addEvent(message) }
             }
-            updateIdleTimer()
+            .onChange(of: camera.latestVideo) { _, url in
+                if url != nil { addEvent("Видео сохранено") }
+            }
+    }
+
+    private func connectObservers() {
+        wheel.onSample = { [weak library, weak route] frame, demo, time in
+            if !demo { route?.append(frame, at: time) }
+            library?.append(frame, demo: demo, time: time, fix: demo ? nil : route?.fixForLog(at: time))
         }
-        .alert("WheelLog", isPresented: Binding(
-            get: { cover != .camera && camera.message != nil },
-            set: { if !$0 { camera.message = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(camera.message ?? "")
+        wheel.onTelemetryLost = { [weak route] time in route?.wheelLost(at: time) }
+        wheel.onSourceEnded = { [weak library] in library?.stopLog() }
+        route.onFileChange = { [weak library] url in library?.setActiveRoute(url) }
+        camera.onVideoSaved = { [weak library] in library?.refresh() }
+        updateCamera(wheel.telemetry)
+        updateIdleTimer()
+        #if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--demo") { wheel.setDemo(true) }
+        #endif
+    }
+
+    @ViewBuilder
+    private func coverContent(_ item: Cover) -> some View {
+        switch item {
+        case .wheel:
+            WheelControls(wheel: wheel)
+        case .settings:
+            ClassicSettings()
+        case .camera:
+            RideCameraView(wheel: wheel, camera: camera)
+                .onAppear { if phase == .active { camera.open() } }
+        case .route:
+            LiveRouteView(recorder: route, wheel: wheel)
         }
+    }
+
+    private func phaseChanged(_ newPhase: ScenePhase) {
+        if newPhase != .active { wheel.stopStrobe() }
+        if newPhase == .background {
+            camera.close()
+            wheel.stopScan()
+        }
+        if newPhase == .active, cover == .camera { camera.open() }
+        updateIdleTimer()
     }
 
     private var toolbar: some View {
