@@ -62,6 +62,7 @@ jobs:
 
       - name: Capture the dashboard on iPhone 16 Plus
         if: inputs.preview
+        timeout-minutes: 6
         run: |
           runtime=$(xcrun simctl list runtimes --json | python3 -c '
           import json, sys
@@ -73,7 +74,7 @@ jobs:
           xcrun simctl boot "$device"
           xcodebuild build -project WheelLog.xcodeproj -scheme WheelLog -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$RUNNER_TEMP/wheellog-preview" CODE_SIGNING_ALLOWED=NO -quiet
+            -derivedDataPath "$RUNNER_TEMP/wheellog-preview" CODE_SIGNING_ALLOWED=NO ARCHS=arm64 -quiet
           app="$RUNNER_TEMP/wheellog-preview/Build/Products/Debug-iphonesimulator/WheelLog.app"
           xcrun simctl bootstatus "$device" -b
           xcrun simctl install "$device" "$app"
