@@ -14,6 +14,7 @@ struct ShermanProtocolChecks {
         precondition(decoded.pedalMode == .medium)
         precondition(decoded.telemetry.speed == -31.2)
         precondition(decoded.telemetry.voltage == 95.5)
+        precondition(decoded.telemetry.battery == 76)
         precondition(decoded.telemetry.pwm == 41.25)
         precondition(decoded.telemetry.phaseCurrent == -18.4)
         precondition(abs((decoded.telemetry.power ?? 0) + 724.845) < 0.001)

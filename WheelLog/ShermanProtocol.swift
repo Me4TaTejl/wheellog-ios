@@ -83,7 +83,7 @@ struct ShermanProtocol {
         let pwmRaw: UInt16? = payloadEnd >= 36 ? be16(packet, 34) : nil
         let pwm = pwmRaw.flatMap { $0 <= 10_000 ? Double($0) / 100 : nil }
         let current = pwm.map { phaseCurrent * $0 / 100 }
-        let battery = min(100, max(0, ((voltageRaw - 7935) / 19.5).rounded()))
+        let battery = batteryEstimate(voltageRaw)
         let version = String(format: "%03d.%d.%02d", Int(firmware / 1000),
                              Int((firmware % 1000) / 100), Int(firmware % 100))
         return ShermanFrame(
@@ -94,6 +94,12 @@ struct ShermanProtocol {
             version: version, pedalMode: mode,
             speedAlarm: Double(be16(packet, 24)) / 10, tiltBack: Double(be16(packet, 26)) / 10
         )
+    }
+
+    private static func batteryEstimate(_ centivolts: Double) -> Double {
+        if centivolts > 10020 { return 100 }
+        if centivolts > 8160 { return ((centivolts - 8070) / 19.5).rounded() }
+        return max(0, ((centivolts - 7935) / 48.75).rounded())
     }
 
     private static func be16(_ bytes: [UInt8], _ index: Int) -> UInt16 {

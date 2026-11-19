@@ -29,6 +29,29 @@ struct Telemetry: Equatable {
     }
 }
 
+struct RideExtrema: Equatable {
+    private(set) var speed: Double?
+    private(set) var pwm: Double?
+    private(set) var current: Double?
+    private(set) var power: Double?
+    private(set) var temperature: Double?
+    private(set) var lowestBattery: Double?
+
+    mutating func include(_ sample: Telemetry) {
+        speed = largest(speed, sample.speed.map(abs))
+        pwm = largest(pwm, sample.pwm)
+        current = largest(current, sample.current)
+        power = largest(power, sample.power)
+        temperature = largest(temperature, sample.temperature)
+        if let battery = sample.battery { lowestBattery = min(lowestBattery ?? battery, battery) }
+    }
+
+    private func largest(_ previous: Double?, _ sample: Double?) -> Double? {
+        guard let sample else { return previous }
+        return max(previous ?? sample, sample)
+    }
+}
+
 enum Metric: String, CaseIterable, Identifiable {
     case speed = "Скорость"
     case pwm = "ШИМ"

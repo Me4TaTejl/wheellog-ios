@@ -6,6 +6,7 @@ import UIKit
 struct RideCameraView: View {
     @ObservedObject var wheel: WheelConnection
     @ObservedObject var camera: CameraModel
+    @Environment(\.dismiss) private var dismiss
     @AppStorage("overlayMetrics") private var mask = OverlayLayout.defaultMask
     @State private var showMetrics = false
 
@@ -43,6 +44,12 @@ struct RideCameraView: View {
             .navigationTitle("Камера")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Назад", systemImage: "chevron.left") {
+                        camera.close()
+                        dismiss()
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showMetrics = true } label: {
                         Image(systemName: "slider.horizontal.3")
@@ -52,6 +59,14 @@ struct RideCameraView: View {
                 }
             }
             .sheet(isPresented: $showMetrics) { metricPicker }
+            .alert("WheelLog", isPresented: Binding(
+                get: { camera.message != nil },
+                set: { if !$0 { camera.message = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(camera.message ?? "")
+            }
         }
     }
 
@@ -157,7 +172,7 @@ struct LibraryView: View {
     @State private var selected: RideLibrary.Item?
 
     var body: some View {
-        RideScreen(title: "Архив") {
+        RideScreen(title: "Поездки") {
             if library.items.isEmpty {
                 ContentUnavailableView("Записей пока нет", systemImage: "folder",
                                        description: Text("Здесь появятся CSV и видео после завершения записи."))

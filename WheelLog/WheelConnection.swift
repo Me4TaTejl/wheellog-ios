@@ -21,6 +21,8 @@ final class WheelConnection: NSObject, ObservableObject {
     struct SpeedPoint: Identifiable {
         let time: TimeInterval
         let speed: Double
+        let current: Double?
+        let pwm: Double?
         var id: TimeInterval { time }
     }
 
@@ -29,6 +31,7 @@ final class WheelConnection: NSObject, ObservableObject {
     @Published private(set) var deviceName: String?
     @Published private(set) var frame: ShermanFrame?
     @Published private(set) var telemetry = Telemetry()
+    @Published private(set) var extrema = RideExtrema()
     @Published private(set) var speedHistory = [SpeedPoint]()
     @Published private(set) var demo = false
     @Published private(set) var strobe = false
@@ -98,6 +101,7 @@ final class WheelConnection: NSObject, ObservableObject {
         stopScan()
         setDemo(false)
         decoder = ShermanProtocol()
+        extrema = RideExtrema()
         commandStatus = nil
         state = .connecting
         status = "Подключение…"
@@ -135,6 +139,7 @@ final class WheelConnection: NSObject, ObservableObject {
         demo = enabled
         speedHistory.removeAll()
         telemetry = Telemetry()
+        extrema = RideExtrema()
         if enabled {
             stopScan()
             let start = currentTime
@@ -149,6 +154,12 @@ final class WheelConnection: NSObject, ObservableObject {
     func setLight(_ on: Bool) {
         guard canControl, !strobe else { return }
         requestSteadyLight(on)
+    }
+
+    func resetExtrema() {
+        var reset = RideExtrema()
+        reset.include(telemetry)
+        extrema = reset
     }
 
     func startStrobe(hz: Double) {
@@ -225,12 +236,15 @@ final class WheelConnection: NSObject, ObservableObject {
     }
 
     private func publish(_ sample: Telemetry) {
+        var updated = extrema
+        updated.include(sample)
+        if updated != extrema { extrema = updated }
         telemetry = sample
         let now = currentTime
         if let speed = Metric.speed.value(in: sample),
            speedHistory.last.map({ now - $0.time >= 0.25 }) ?? true {
             speedHistory.removeAll { now - $0.time > 30 }
-            speedHistory.append(.init(time: now, speed: speed))
+            speedHistory.append(.init(time: now, speed: speed, current: sample.current, pwm: sample.pwm))
         }
         onSample?(sample, demo, Date())
     }

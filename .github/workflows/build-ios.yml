@@ -2,6 +2,11 @@ name: Build WheelLog IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      preview:
+        description: Capture the dashboard in an iPhone 16 Plus simulator
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -53,4 +58,34 @@ jobs:
           path: ${{ runner.temp }}/WheelLog.ipa
           if-no-files-found: error
           compression-level: 0
+          retention-days: 14
+
+      - name: Capture the dashboard on iPhone 16 Plus
+        if: inputs.preview
+        run: |
+          runtime=$(xcrun simctl list runtimes --json | python3 -c '
+          import json, sys
+          ios = [r for r in json.load(sys.stdin)["runtimes"]
+                 if r["isAvailable"] and r["name"].startswith("iOS ")]
+          print(max(ios, key=lambda r: tuple(map(int, r["version"].split("."))))["identifier"])
+          ')
+          device=$(xcrun simctl create WheelLogPreview com.apple.CoreSimulator.SimDeviceType.iPhone-16-Plus "$runtime")
+          xcrun simctl boot "$device"
+          xcodebuild build -project WheelLog.xcodeproj -scheme WheelLog -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/wheellog-preview" CODE_SIGNING_ALLOWED=NO -quiet
+          app="$RUNNER_TEMP/wheellog-preview/Build/Products/Debug-iphonesimulator/WheelLog.app"
+          xcrun simctl bootstatus "$device" -b
+          xcrun simctl install "$device" "$app"
+          xcrun simctl launch "$device" local.wheellog.sherman.ios --demo
+          sleep 4
+          xcrun simctl io "$device" screenshot "$RUNNER_TEMP/WheelLog-iPhone.png"
+
+      - name: Publish the dashboard preview
+        if: inputs.preview
+        uses: actions/upload-artifact@v7
+        with:
+          name: WheelLog-iPhone-preview
+          path: ${{ runner.temp }}/WheelLog-iPhone.png
+          if-no-files-found: error
           retention-days: 14

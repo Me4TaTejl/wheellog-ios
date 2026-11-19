@@ -10,7 +10,7 @@ struct WheelControls: View {
     }
 
     var body: some View {
-        RideScreen(title: "Колесо") {
+        RideScreen(title: "Колесо", showsClose: true) {
             RidePanel {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Veteran Sherman S").font(.title3.bold())
