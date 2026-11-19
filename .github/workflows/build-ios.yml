@@ -40,7 +40,7 @@ jobs:
           ipa="$RUNNER_TEMP/WheelLog.ipa"
 
           test -x "$app/WheelLog"
-          xcrun lipo -verify_arch arm64 "$app/WheelLog"
+          xcrun lipo "$app/WheelLog" -verify_arch arm64
           mkdir -p "$stage/Payload"
           ditto "$app" "$stage/Payload/WheelLog.app"
           ditto -c -k --keepParent "$stage/Payload" "$ipa"
